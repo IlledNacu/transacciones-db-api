@@ -5,11 +5,14 @@ from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy import create_engine, Column, Integer, String, Date, DateTime, Numeric, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
-
 from pydantic import BaseModel
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
+# Para el modelo de IA
+import pandas as pd
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
 
 # MI API
 app = FastAPI(title="Transacciones bancarias")
@@ -61,6 +64,12 @@ class Transaccion(Base):
     cliente = relationship("Cliente", back_populates="transacciones")
     cajero = relationship("Cajero", back_populates="transacciones")
     tipo_transaccion = relationship("TipoTransaccion", back_populates="transacciones")
+
+class ClienteSospechosoResponse(BaseModel):
+    id_cliente: str
+    nombre: str
+    apellido: str
+    sospechoso_por: List[str]
 
 Base.metadata.create_all(engine)
 
@@ -285,4 +294,76 @@ def delete_transaccion(id:str, db:Session = Depends(get_db)):
 def get_all_transaccion(db:Session = Depends(get_db)):
     return db.query(Transaccion).all()
 
-# Levantamos la API  en la terminal con: uvicorn miapi:app --reload
+# Detección de clientes sospechosos con IA
+@app.get("/clientes_sospechosos", response_model=List[ClienteSospechosoResponse])
+def detectar_clientes_sospechosos(db: Session = Depends(get_db)):
+    # Obtenemos datos de transacciones
+    transacciones = db.query(Transaccion).all()
+    if not transacciones:
+        raise HTTPException(status_code=404, detail="No hay transacciones registradas")
+    data = [
+        {
+            "id_cliente": t.id_cliente,
+            "monto": float(t.monto),
+            "fecha_hora": t.fecha_hora
+        }
+        for t in transacciones
+    ]
+    df = pd.DataFrame(data)
+
+    # Feature engineering
+    df["fecha_hora"] = pd.to_datetime(df["fecha_hora"])
+    df_features = df.groupby("id_cliente").agg(
+        conteo_transacciones=("monto", "count"),
+        monto_promedio=("monto", "mean"),
+        monto_std=("monto", "std"),
+        monto_maximo=("monto", "max"),
+        monto_minimo=("monto", "min"),
+        tiempo_entre_transacciones=("fecha_hora", lambda x: x.diff().dt.total_seconds().mean())
+    ).reset_index()
+    df_features.fillna(0, inplace=True)
+
+    # Seleccionamos features
+    features = [
+        "conteo_transacciones",
+        "monto_promedio",
+        "monto_std",
+        "monto_maximo",
+        "monto_minimo",
+        "tiempo_entre_transacciones"
+    ]
+    X = df_features[features]
+
+    # Modelos de detección
+    iso_forest = IsolationForest(contamination=0.05, random_state=42)
+    df_features["outlier_iso_forest"] = iso_forest.fit_predict(X)
+
+    lof = LocalOutlierFactor(n_neighbors=20, contamination="auto")
+    df_features["outlier_lof"] = lof.fit_predict(X)
+
+    # Identificamos sospechosos
+    sospechosos = df_features[
+        (df_features["outlier_iso_forest"] == -1) | (df_features["outlier_lof"] == -1)
+    ]
+    resultados = []
+    for _, row in sospechosos.iterrows():
+        cliente = db.query(Cliente).filter(Cliente.id == row["id_cliente"]).first()
+        motivos = []
+        if row["monto_maximo"] > row["monto_promedio"] * 5:
+            motivos.append("Monto muy alto comparado con su promedio")
+        if row["conteo_transacciones"] > df_features["conteo_transacciones"].mean() * 3:
+            motivos.append("Frecuencia inusual de transacciones")
+        if row["tiempo_entre_transacciones"] < df_features["tiempo_entre_transacciones"].mean() / 3:
+            motivos.append("Transacciones demasiado seguidas")
+        if not motivos:  # fallback si los modelos marcaron sospechoso pero no encontramos regla
+            motivos.append("Comportamiento atípico indefinido")
+        resultados.append(ClienteSospechosoResponse(
+            id_cliente=row["id_cliente"],
+            nombre=cliente.nombre if cliente else "Desconocido",
+            apellido=cliente.apellido if cliente else "Desconocido",
+            sospechoso_por=motivos
+        ))
+
+    return resultados
+
+# Levantamos la API  en la terminal con: uvicorn transaccionesapi:app --reload
