@@ -1,5 +1,3 @@
-# En terminal hacer: pip install pandas
-
 import pandas as pd
 from sqlalchemy.orm import Session
 from datetime import datetime

@@ -1,4 +1,4 @@
-# En terminal: pip install fastapi sqlalchemy uvicorn
+# En terminal: pip install fastapi sqlalchemy uvicorn scikit-learn pandas
 
 # IMPORTS
 from fastapi import FastAPI, HTTPException, Depends
