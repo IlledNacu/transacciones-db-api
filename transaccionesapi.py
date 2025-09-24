@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker, Session, relationship
 from pydantic import BaseModel
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import Optional, List, Dict
 # Para el modelo de IA
 import pandas as pd
 from sklearn.ensemble import IsolationForest
@@ -365,5 +365,30 @@ def detectar_clientes_sospechosos(db: Session = Depends(get_db)):
         ))
 
     return resultados
+
+@app.get("/stats", response_model=Dict[str, float])
+def get_stats(db: Session = Depends(get_db)):
+    total_transacciones = db.query(Transaccion).count()
+    total_clientes = db.query(Cliente).count()
+    if total_transacciones == 0 or total_clientes == 0:
+        raise HTTPException(status_code=404, detail="No hay datos suficientes para calcular estadísticas")
+
+    # Reutilizamos la detección de clientes sospechosos
+    clientes_sospechosos = detectar_clientes_sospechosos(db)
+
+    # Total de transacciones sospechosas (las de esos clientes)
+    ids_sospechosos = [c.id_cliente for c in clientes_sospechosos]
+    total_transacciones_sospechosas = db.query(Transaccion).filter(
+        Transaccion.id_cliente.in_(ids_sospechosos)
+    ).count()
+
+    porcentaje_clientes_sospechosos = (len(clientes_sospechosos) / total_clientes) * 100
+
+    return {
+        "total_transacciones": total_transacciones,
+        "total_clientes": total_clientes,
+        "total_transacciones_sospechosas": total_transacciones_sospechosas,
+        "porcentaje_clientes_sospechosos": round(porcentaje_clientes_sospechosos, 2)
+    }
 
 # Levantamos la API  en la terminal con: uvicorn transaccionesapi:app --reload
