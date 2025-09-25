@@ -45,3 +45,7 @@ def delete_cajero(id:int, db:Session = Depends(database.get_db)):
 @router.get("/", response_model=List[req_res_models.CajeroResponse])
 def get_all_cajero(db:Session = Depends(database.get_db)):
     return db.query(models.Cajero).all()
+
+@router.get("/count")
+def get_cajeros_count(db: Session = Depends(database.get_db)):
+    return {"total": db.query(models.Cajero).count()}

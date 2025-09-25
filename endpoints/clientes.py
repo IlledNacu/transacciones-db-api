@@ -7,6 +7,10 @@ from typing import List
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
+@router.get("/count")
+def get_clientes_count(db: Session = Depends(database.get_db)):
+    return {"total": db.query(models.Cliente).count()}
+
 @router.get("/{id}", response_model=req_res_models.ClienteResponse)
 def get_cliente(id:str, db:Session = Depends(database.get_db)):
     cliente = db.query(models.Cliente).filter(models.Cliente.id == id).first()
@@ -42,6 +46,20 @@ def delete_cliente(id:str, db:Session = Depends(database.get_db)):
     db.commit()
     return {"message":"Número de cuenta eliminado."}
 
+# @router.get("/", response_model=List[req_res_models.ClienteResponse])
+# def get_all_cliente(db:Session = Depends(database.get_db)):
+#     return db.query(models.Cliente).all()
+
 @router.get("/", response_model=List[req_res_models.ClienteResponse])
-def get_all_cliente(db:Session = Depends(database.get_db)):
-    return db.query(models.Cliente).all()
+def get_all_cliente(
+    skip: int = 0, 
+    limit: int = 30, 
+    db: Session = Depends(database.get_db)
+):
+    return (
+        db.query(models.Cliente)
+        .order_by(models.Cliente.apellido, models.Cliente.nombre)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
