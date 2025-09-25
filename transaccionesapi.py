@@ -65,12 +65,6 @@ class Transaccion(Base):
     cajero = relationship("Cajero", back_populates="transacciones")
     tipo_transaccion = relationship("TipoTransaccion", back_populates="transacciones")
 
-class ClienteSospechosoResponse(BaseModel):
-    id_cliente: str
-    nombre: str
-    apellido: str
-    sospechoso_por: List[str]
-
 Base.metadata.create_all(engine)
 
 # Modelo Pydantic (Dataclass)
@@ -132,6 +126,12 @@ class TransaccionResponse(BaseModel):
     monto:Decimal
     class Config:
         from_attributes = True
+
+class ClienteSospechosoResponse(BaseModel):
+    id_cliente: str
+    nombre: str
+    apellido: str
+    sospechoso_por: List[str]
 
 def get_db():
     db = SessionLocal()
@@ -366,7 +366,7 @@ def detectar_clientes_sospechosos(db: Session = Depends(get_db)):
 
     return resultados
 
-@app.get("/stats", response_model=Dict[str, float])
+@app.get("/estadisticas", response_model=Dict[str, float])
 def get_stats(db: Session = Depends(get_db)):
     total_transacciones = db.query(Transaccion).count()
     total_clientes = db.query(Cliente).count()
