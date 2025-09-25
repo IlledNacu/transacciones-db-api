@@ -2,13 +2,16 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from datetime import datetime
 from decimal import Decimal
-from transaccionesapi import SessionLocal, Cliente, Cajero, Transaccion, TipoTransaccion
+from database import SessionLocal
+from models import Cliente, Cajero, Transaccion, TipoTransaccion
 
+# Creación de la sesión
 db: Session = SessionLocal()
 
+# Carga de datos
+# ---- CLIENTES ----
 clientes_df = pd.read_csv("data/clientes.csv")
 for _, row in clientes_df.iterrows():
-    # Convertir fecha (de string a date)
     fecha_nac = datetime.strptime(row["fecha_nacimiento"], "%Y-%m-%d").date()
 
     cliente = Cliente(
@@ -22,6 +25,7 @@ for _, row in clientes_df.iterrows():
     )
     db.add(cliente)
 
+# ---- CAJEROS ----
 cajeros_df = pd.read_csv("data/cajeros.csv")
 for _, row in cajeros_df.iterrows():
     cajero = Cajero(
@@ -33,6 +37,7 @@ for _, row in cajeros_df.iterrows():
     )
     db.add(cajero)
 
+# ---- TIPOS DE TRANSACCIONES ----
 tipos_df = pd.read_csv("data/tipos_transacciones.csv")
 for _, row in tipos_df.iterrows():
     tipo = TipoTransaccion(
@@ -40,9 +45,9 @@ for _, row in tipos_df.iterrows():
     )
     db.add(tipo)
 
+# ---- TRANSACCIONES ----
 transacciones_df = pd.read_csv("data/transacciones.csv")
 for _, row in transacciones_df.iterrows():
-    # Convertir fecha_hora (string → datetime)
     fecha_hora = datetime.strptime(row["fecha_hora"], "%Y-%m-%d %H:%M:%S")
 
     transaccion = Transaccion(
@@ -55,7 +60,8 @@ for _, row in transacciones_df.iterrows():
     )
     db.add(transaccion)
 
+# Confirmación de cambios
 db.commit()
 db.close()
 
-# En terminal, ejecutar: python cargar_csvs.py
+print("Datos cargados correctamente")
