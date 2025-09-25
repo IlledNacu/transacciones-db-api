@@ -1,0 +1,14 @@
+# Ignorar caches de Python
+__pycache__/
+
+# Ignorar bases de datos locales
+*.db
+
+# Ignorar archivos temporales de VSCode
+.vscode/
+
+# Ignorar logs
+*.log
+
+# Ignorar archivos de sistema
+.DS_Store
