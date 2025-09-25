@@ -7,6 +7,10 @@ from typing import List
 
 router = APIRouter(prefix="/cajeros", tags=["Cajeros"])
 
+@router.get("/count") # Tiene que ir antes de /{id} porque si no confunde count con un id
+def get_cajeros_count(db: Session = Depends(database.get_db)):
+    return db.query(models.Cajero).count()
+
 @router.get("/{id}", response_model=req_res_models.CajeroResponse)
 def get_cajero(id:int, db:Session = Depends(database.get_db)):
     tipo_cajero = db.query(models.Cajero).filter(models.Cajero.id == id).first()
@@ -42,10 +46,20 @@ def delete_cajero(id:int, db:Session = Depends(database.get_db)):
     db.commit()
     return {"message":"Cajero eliminado."}
 
-@router.get("/", response_model=List[req_res_models.CajeroResponse])
-def get_all_cajero(db:Session = Depends(database.get_db)):
-    return db.query(models.Cajero).all()
+# @router.get("/", response_model=List[req_res_models.CajeroResponse])
+# def get_all_cajero(db:Session = Depends(database.get_db)):
+#     return db.query(models.Cajero).all()
 
-@router.get("/count")
-def get_cajeros_count(db: Session = Depends(database.get_db)):
-    return {"total": db.query(models.Cajero).count()}
+@router.get("/", response_model=List[req_res_models.CajeroResponse])
+def get_all_cajero(
+    skip: int = 0, 
+    limit: int = 30, 
+    db: Session = Depends(database.get_db)
+):
+    return (
+        db.query(models.Cajero)
+        .order_by(models.Cajero.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )

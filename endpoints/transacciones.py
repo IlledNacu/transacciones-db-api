@@ -7,6 +7,10 @@ from typing import List
 
 router = APIRouter(prefix="/transacciones", tags=["Transacciones"])
 
+@router.get("/count")
+def get_transacciones_count(db: Session = Depends(database.get_db)):
+    return db.query(models.Transaccion).count()
+
 @router.get("/{id}", response_model=req_res_models.TransaccionResponse)
 def get_transaccion(id:str, db:Session = Depends(database.get_db)):
     transaccion = db.query(models.Transaccion).filter(models.Transaccion.id == id).first()
@@ -42,10 +46,20 @@ def delete_transaccion(id:str, db:Session = Depends(database.get_db)):
     db.commit()
     return {"message":"Transacción eliminada."}
 
-@router.get("/", response_model=List[req_res_models.TransaccionResponse])
-def get_all_transaccion(db:Session = Depends(database.get_db)):
-    return db.query(models.Transaccion).all()
+# @router.get("/", response_model=List[req_res_models.TransaccionResponse])
+# def get_all_transaccion(db:Session = Depends(database.get_db)):
+#     return db.query(models.Transaccion).all()
 
-@router.get("/count")
-def get_transacciones_count(db: Session = Depends(database.get_db)):
-    return {"total": db.query(models.Transaccion).count()}
+@router.get("/", response_model=List[req_res_models.TransaccionResponse])
+def get_all_transaccion(
+    skip: int = 0, 
+    limit: int = 30, 
+    db: Session = Depends(database.get_db)
+):
+    return (
+        db.query(models.Transaccion)
+        .order_by(models.Transaccion.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )

@@ -7,9 +7,9 @@ from typing import List
 
 router = APIRouter(prefix="/clientes", tags=["Clientes"])
 
-@router.get("/count")
+@router.get("/count")  # Tiene que ir antes de /{id} porque si no confunde count con un id
 def get_clientes_count(db: Session = Depends(database.get_db)):
-    return {"total": db.query(models.Cliente).count()}
+    return db.query(models.Cliente).count()
 
 @router.get("/{id}", response_model=req_res_models.ClienteResponse)
 def get_cliente(id:str, db:Session = Depends(database.get_db)):
@@ -58,7 +58,7 @@ def get_all_cliente(
 ):
     return (
         db.query(models.Cliente)
-        .order_by(models.Cliente.apellido, models.Cliente.nombre)
+        .order_by(models.Cliente.id)
         .offset(skip)
         .limit(limit)
         .all()

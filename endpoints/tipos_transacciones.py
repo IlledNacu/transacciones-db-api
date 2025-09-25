@@ -7,6 +7,10 @@ from typing import List
 
 router = APIRouter(prefix="/tipos_transacciones", tags=["Tipos de transacciones"])
 
+@router.get("/count")
+def get_tipos_transacciones_count(db: Session = Depends(database.get_db)):
+    return db.query(models.TipoTransaccion).count()
+
 @router.get("/{id}", response_model=req_res_models.TipoTransaccionResponse)
 def get_tipo_transaccion(id: int, db: Session = Depends(database.get_db)):
     tipo_transaccion = db.query(models.TipoTransaccion).filter(models.TipoTransaccion.id == id).first()
@@ -47,7 +51,3 @@ def delete_tipo_transaccion(id:int, db:Session = Depends(database.get_db)):
 @router.get("/", response_model=List[req_res_models.TipoTransaccionResponse])
 def get_all_tipo_transaccion(db:Session = Depends(database.get_db)):
     return db.query(models.TipoTransaccion).all()
-
-@router.get("/count")
-def get_tipos_transacciones_count(db: Session = Depends(database.get_db)):
-    return {"total": db.query(models.TipoTransaccion).count()}

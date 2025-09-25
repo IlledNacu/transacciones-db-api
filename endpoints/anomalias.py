@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 import numpy as np
 from sqlalchemy.orm import Session
+from endpoints.clientes import get_clientes_count
 import models
 import req_res_models
 import database
@@ -94,7 +95,7 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
 @router.get("/estadisticas", response_model=Dict[str, float])
 def get_stats(db: Session = Depends(database.get_db)):
     total_transacciones = db.query(models.Transaccion).count()
-    total_clientes = db.query(models.Cliente).count()
+    total_clientes = get_clientes_count(db)
     if total_transacciones == 0 or total_clientes == 0:
         raise HTTPException(status_code=404, detail="No hay datos suficientes para calcular estadísticas")
 
