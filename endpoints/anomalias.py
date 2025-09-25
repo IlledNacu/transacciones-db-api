@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+import numpy as np
 from sqlalchemy.orm import Session
 import models
 import req_res_models
@@ -8,6 +9,8 @@ from typing import List, Dict
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sqlalchemy import func
+from datetime import datetime
 # Para gráficos de Plotly
 import plotly.express as px
 from fastapi.responses import HTMLResponse
@@ -86,12 +89,23 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
 
     return resultados
 
+# DASHBOARD
+
 @router.get("/estadisticas", response_model=Dict[str, float])
 def get_stats(db: Session = Depends(database.get_db)):
     total_transacciones = db.query(models.Transaccion).count()
     total_clientes = db.query(models.Cliente).count()
     if total_transacciones == 0 or total_clientes == 0:
         raise HTTPException(status_code=404, detail="No hay datos suficientes para calcular estadísticas")
+
+    # Obtenemos el timestamp más antiguo y el más reciente
+    min_fecha = db.query(func.min(models.Transaccion.fecha_hora)).scalar()
+    max_fecha = db.query(func.max(models.Transaccion.fecha_hora)).scalar()
+    if not min_fecha or not max_fecha or min_fecha == max_fecha:
+        raise HTTPException(status_code=400, detail="No hay suficiente rango temporal para calcular promedio")
+    # Calculamos la diferencia en minutos
+    minutos = (max_fecha - min_fecha).total_seconds() / 60
+    promedio_transacciones_por_minuto = total_transacciones / minutos
 
     # Reutilizamos la detección de clientes sospechosos
     clientes_sospechosos = detectar_clientes_sospechosos(db)
@@ -105,7 +119,7 @@ def get_stats(db: Session = Depends(database.get_db)):
     porcentaje_clientes_sospechosos = (len(clientes_sospechosos) / total_clientes) * 100
 
     return {
-        "total_transacciones": total_transacciones,
+        "promedio_transacciones_por_minuto": round(promedio_transacciones_por_minuto, 2),
         "total_clientes": total_clientes,
         "total_transacciones_sospechosas": total_transacciones_sospechosas,
         "porcentaje_clientes_sospechosos": round(porcentaje_clientes_sospechosos, 2)
