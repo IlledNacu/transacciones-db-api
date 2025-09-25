@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 from endpoints import anomalias, tipos_transacciones, cajeros, clientes, transacciones
 
@@ -7,6 +8,19 @@ Base.metadata.create_all(bind=engine)
 
 # Creación de la API
 app = FastAPI(title="Transacciones bancarias")
+
+# Permitir CORS para que interactúe con el front
+origins = [
+    "http://127.0.0.1:5500",  # el frontend
+    "http://localhost:5500"
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Endpoint inicial
 @app.get("/")
