@@ -57,3 +57,12 @@ class ClienteSospechosoResponse(BaseModel):
     nombre: str
     apellido: str
     sospechoso_por: List[str]
+
+class TransaccionSospechosaResponse(BaseModel):
+    id_transaccion: str
+    id_cliente: str
+    nombre: str
+    apellido: str
+    monto: Decimal
+    fecha_hora: datetime
+    sospechosa_por: List[str]
