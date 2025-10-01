@@ -9,6 +9,8 @@ from typing import List, Dict
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 from sqlalchemy import func
 from datetime import datetime
 # Para gráficos de Plotly
@@ -64,6 +66,34 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
     lof = LocalOutlierFactor(n_neighbors=20, contamination="auto")
     df_features["outlier_lof"] = lof.fit_predict(X)
 
+    # K-Means Clustering para detección de anomalías
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    # Determinamos número óptimo de clusters (mínimo 2, máximo 10 o número de clientes)
+    n_clusters = min(max(2, len(df_features) // 10), 10)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    df_features["cluster"] = kmeans.fit_predict(X_scaled)
+    
+    # Calculamos distancia de cada punto a su centroide
+    df_features["distancia_centroide"] = np.min(
+        np.linalg.norm(X_scaled[:, np.newaxis] - kmeans.cluster_centers_, axis=2), 
+        axis=1
+    )
+    
+    # Marcamos como outliers los que están en el percentil 95 de distancia
+    threshold = np.percentile(df_features["distancia_centroide"], 95)
+    df_features["outlier_kmeans"] = df_features["distancia_centroide"].apply(
+        lambda x: -1 if x > threshold else 1
+    )
+
+    # Identificamos sospechosos (al menos 2 de 3 métodos deben marcarlo)
+    df_features["votos_sospechoso"] = (
+        (df_features["outlier_iso_forest"] == -1).astype(int) +
+        (df_features["outlier_lof"] == -1).astype(int) +
+        (df_features["outlier_kmeans"] == -1).astype(int)
+    )
+
     # Identificamos sospechosos
     sospechosos = df_features[
         (df_features["outlier_iso_forest"] == -1) | (df_features["outlier_lof"] == -1)
@@ -78,6 +108,8 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
             motivos.append("Frecuencia inusual de transacciones")
         if row["tiempo_entre_transacciones"] < df_features["tiempo_entre_transacciones"].mean() / 3:
             motivos.append("Transacciones demasiado seguidas")
+        if row["distancia_centroide"] > threshold:
+            motivos.append("Comportamiento alejado de patrones normales (clustering)")
         if not motivos:  # fallback si los modelos marcaron sospechoso pero no encontramos regla
             motivos.append("Comportamiento atípico indefinido")
         resultados.append(req_res_models.ClienteSospechosoResponse(
