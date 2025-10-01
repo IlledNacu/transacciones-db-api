@@ -102,6 +102,16 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
     for _, row in sospechosos.iterrows():
         cliente = db.query(models.Cliente).filter(models.Cliente.id == row["id_cliente"]).first()
         motivos = []
+
+        #Agrego como motivo de sospecha que algun modelo lo haya detectado
+        if row["outlier_iso_forest"] == -1:
+            motivos.append("Detectado por Isolation Forest (patrón anómalo)")
+        if row["outlier_lof"] == -1:
+            motivos.append("Detectado por LOF (outlier local)")
+        if row["outlier_kmeans"] == -1:
+            motivos.append("Detectado por K-Means (alejado de clusters normales)")
+            
+        #Motivos de sospecha segun logica del banco
         if row["monto_maximo"] > row["monto_promedio"] * 5:
             motivos.append("Monto muy alto comparado con su promedio")
         if row["conteo_transacciones"] > df_features["conteo_transacciones"].mean() * 3:
