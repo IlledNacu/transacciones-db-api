@@ -45,3 +45,5 @@ def delete_cliente(id:str, db:Session = Depends(database.get_db)):
 @router.get("/", response_model=List[req_res_models.ClienteResponse])
 def get_all_cliente(db:Session = Depends(database.get_db)):
     return db.query(models.Cliente).all()
+
+# Todas las consultas siguen la misma lógica que las de cajeros.py

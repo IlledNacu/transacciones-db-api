@@ -45,3 +45,5 @@ def delete_transaccion(id:str, db:Session = Depends(database.get_db)):
 @router.get("/", response_model=List[req_res_models.TransaccionResponse])
 def get_all_transaccion(db:Session = Depends(database.get_db)):
     return db.query(models.Transaccion).all()
+
+# Todas las consultas siguen la misma lógica que las de cajeros.py

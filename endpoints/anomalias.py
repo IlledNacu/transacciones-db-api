@@ -197,3 +197,155 @@ def grafico_plotly(db: Session = Depends(database.get_db)):
         hover_data=["id_cliente"]
     )
     return fig.to_html(full_html=True)
+
+def get_transacciones_paginated(db: Session, skip: int = 0, limit: int = 10000):
+    return db.query(models.Transaccion).offset(skip).limit(limit).all()
+
+# Detección de transacciones individuales sospechosas sin agrupar por cliente
+@router.get("/transacciones_sospechosas", response_model=List[req_res_models.TransaccionSospechosaResponse])
+def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 10000, db: Session = Depends(database.get_db)):
+    transacciones = db.query(models.Transaccion).offset(skip).limit(limit).all()
+    if not transacciones:
+        raise HTTPException(status_code=404, detail="No hay transacciones registradas")
+
+    data = [
+        {
+            "id": t.id,  # <- id de la transacción (string según tu DTO)
+            "id_cliente": t.id_cliente,
+            "id_cajero": t.id_cajero,
+            "id_tipo_transaccion": t.id_tipo_transaccion,
+            "monto": float(t.monto),
+            "fecha_hora": t.fecha_hora
+        }
+        for t in transacciones
+    ]
+    df = pd.DataFrame(data)
+    df["fecha_hora"] = pd.to_datetime(df["fecha_hora"])
+    df["hora_del_dia"] = df["fecha_hora"].dt.hour
+    df["dia_semana"] = df["fecha_hora"].dt.dayofweek
+    df["es_fin_de_semana"] = df["dia_semana"].isin([5, 6]).astype(int)
+    df["es_horario_nocturno"] = df["hora_del_dia"].between(0, 6).astype(int)
+
+    monto_promedio_global = df["monto"].mean()
+    monto_std_global = df["monto"].std()
+
+    df["monto_promedio_cliente"] = df.groupby("id_cliente")["monto"].transform("mean")
+    df["monto_std_cliente"] = df.groupby("id_cliente")["monto"].transform("std")
+    df["transacciones_cliente"] = df.groupby("id_cliente")["id"].transform("count")
+
+    df = df.sort_values(["id_cliente", "fecha_hora"])
+    df["tiempo_desde_ultima"] = df.groupby("id_cliente")["fecha_hora"].diff().dt.total_seconds()
+    df["tiempo_desde_ultima"] = df["tiempo_desde_ultima"].fillna(0)
+
+    features = ["monto", "hora_del_dia", "es_fin_de_semana", "es_horario_nocturno", "tiempo_desde_ultima", "transacciones_cliente"]
+    X = df[features].fillna(0)
+
+    iso_forest = IsolationForest(contamination=0.1, random_state=42)
+    df["outlier_iso_forest"] = iso_forest.fit_predict(X)
+    df["score_iso_forest"] = iso_forest.score_samples(X)
+
+    lof = LocalOutlierFactor(n_neighbors=20, contamination=0.1)
+    df["outlier_lof"] = lof.fit_predict(X)
+    df["score_lof"] = lof.negative_outlier_factor_
+
+    df["score_anomalia"] = (
+        (df["score_iso_forest"] - df["score_iso_forest"].min()) / (df["score_iso_forest"].max() - df["score_iso_forest"].min()) * 0.5 +
+        (df["score_lof"] - df["score_lof"].min()) / (df["score_lof"].max() - df["score_lof"].min()) * 0.5
+    )
+
+    sospechosas = df[(df["outlier_iso_forest"] == -1) | (df["outlier_lof"] == -1)]
+
+    resultados = []
+    for _, row in sospechosas.iterrows():
+        cliente = db.query(models.Cliente).filter(models.Cliente.id == row["id_cliente"]).first()
+
+        motivos = []
+        if row["outlier_iso_forest"] == -1:
+            motivos.append("Detectado por Isolation Forest (patrón anómalo global)")
+        if row["outlier_lof"] == -1:
+            motivos.append("Detectado por LOF (outlier local)")
+
+        if row["monto"] > monto_promedio_global + 3 * monto_std_global:
+            motivos.append(f"Monto excesivamente alto (${row['monto']:.2f})")
+
+        if row["monto_std_cliente"] > 0:
+            z_score = (row["monto"] - row["monto_promedio_cliente"]) / row["monto_std_cliente"]
+            if abs(z_score) > 3:
+                motivos.append(f"Monto inusual para este cliente (Z-score: {z_score:.2f})")
+
+        if row["es_horario_nocturno"] == 1 and row["monto"] > monto_promedio_global:
+            motivos.append("Transacción de alto monto en horario nocturno")
+
+        if row["tiempo_desde_ultima"] > 0 and row["tiempo_desde_ultima"] < 60:
+            motivos.append(f"Transacción muy cercana a la anterior ({row['tiempo_desde_ultima']:.0f} segs)")
+
+        if row["es_fin_de_semana"] == 1 and row["monto"] > monto_promedio_global * 2:
+            motivos.append("Transacción de alto monto en fin de semana")
+
+        if row["monto"] % 1000 == 0 and row["monto"] >= 1000:
+            motivos.append(f"Monto redondo sospechoso (${row['monto']:.2f})")
+
+        if not motivos:
+            motivos.append("Patrón atípico detectado")
+
+        resultados.append(req_res_models.TransaccionSospechosaResponse(
+            id=row["id"],
+            id_cliente=row["id_cliente"],
+            id_cajero=row["id_cajero"],
+            id_tipo_transaccion=row["id_tipo_transaccion"],
+            monto=row["monto"],
+            fecha_hora=row["fecha_hora"],
+            nombre=cliente.nombre if cliente else "Desconocido",
+            apellido=cliente.apellido if cliente else "Desconocido",
+            sospechosa_por=motivos,
+            score_anomalia=float(row["score_anomalia"])
+        ))
+
+    resultados.sort(key=lambda x: x.score_anomalia, reverse=False)
+    return resultados
+
+
+#Gráfico interactivo de transacciones individuales mostrando las sospechosas
+@router.get("/graficos/transacciones_individuales", response_class=HTMLResponse)
+def grafico_transacciones_individuales(skip: int = 0, limit: int = 10000, db: Session = Depends(database.get_db)):
+    transacciones = db.query(models.Transaccion).offset(skip).limit(limit).all()
+    if not transacciones:
+        return "<h3>No hay transacciones</h3>"
+
+    data = [
+        {
+            "id": t.id,
+            "id_cliente": t.id_cliente,
+            "id_cajero": t.id_cajero,
+            "id_tipo_transaccion": t.id_tipo_transaccion,
+            "monto": float(t.monto),
+            "fecha_hora": t.fecha_hora
+        }
+        for t in transacciones
+    ]
+    df = pd.DataFrame(data)
+    df["fecha_hora"] = pd.to_datetime(df["fecha_hora"])
+    df["hora"] = df["fecha_hora"].dt.hour
+
+    features = df[["monto", "hora"]].copy()
+    iso_forest = IsolationForest(contamination=0.1, random_state=42)
+    df["sospechoso"] = iso_forest.fit_predict(features)
+    df["categoria"] = df["sospechoso"].map({1: "Normal", -1: "Sospechoso"})
+
+    fig = px.scatter(
+        df,
+        x="fecha_hora",
+        y="monto",
+        color="categoria",
+        hover_data=["id", "id_cliente", "id_tipo_transaccion", "hora"],
+        title="Transacciones Individuales - Detección de Anomalías",
+        color_discrete_map={"Normal": "blue", "Sospechoso": "red"}
+    )
+
+    fig.update_layout(
+        xaxis_title="Fecha y Hora",
+        yaxis_title="Monto ($)",
+        hovermode="closest"
+    )
+
+    return fig.to_html(full_html=True)
