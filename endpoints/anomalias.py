@@ -360,7 +360,7 @@ def get_stats(db: Session = Depends(database.get_db)):
     # Reutilizamos la detección de clientes sospechosos
     clientes_sospechosos = detectar_clientes_sospechosos(db)
 
-    # REVISAR QUÉ Y CÓMO ESTÁ CONTABILIZANDO AL CALCULAR ESTAS TRANSACCIONES SOSPECHOSAS
+    # REVISAR QUÉ Y CÓMO ESTÁ CONTABILIZANDO AL CALCULAR ESTAS TRANSACCIONES SOSPECHOSAS --> Se redujeron
     # Total de transacciones sospechosas (las de esos clientes)
     ids_sospechosos = [c.id_cliente for c in clientes_sospechosos]
     total_transacciones_sospechosas = db.query(models.Transaccion).filter(

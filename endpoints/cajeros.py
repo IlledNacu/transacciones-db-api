@@ -9,7 +9,7 @@ router = APIRouter(prefix="/cajeros", tags=["Cajeros"])
 # APIRouter agrupa todos los endpoints bajo el prefijo /cajeros
 
 @router.get("/{id}", response_model=req_res_models.CajeroResponse)
-def get_cajero(id:int, db:Session = Depends(database.get_db)):
+def get_cajero(id:str, db:Session = Depends(database.get_db)):
     tipo_cajero = db.query(models.Cajero).filter(models.Cajero.id == id).first() # Busca en la tabla cajeros un registro con ese id
     if not tipo_cajero:
         raise HTTPException(status_code=404, detail="Cajero no encontrado.")
