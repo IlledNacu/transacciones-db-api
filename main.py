@@ -5,8 +5,10 @@ from endpoints import anomalias, tipos_transacciones, cajeros, clientes, transac
 
 # Creación de las tablas
 Base.metadata.create_all(bind=engine)
+# Base.metadata, por ser de tipo declarativo, interpreta que los modelos definidos en models.py corresponden a las tablas
 
-# Creación de la API
+# ---- CREACIÓN DE LA API ---- 
+
 app = FastAPI(title="Transacciones bancarias")
 
 # Permitir CORS para que interactúe con el front
@@ -26,8 +28,6 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {"message": "Agregue '/docs' al final del enlace para ingresar a la API de transacciones bancarias."}
-
-# Inclusión de rutas (endpoints)
 # CRUD
 app.include_router(cajeros.router)
 app.include_router(clientes.router)

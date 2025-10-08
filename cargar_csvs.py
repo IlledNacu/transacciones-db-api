@@ -5,15 +5,15 @@ from decimal import Decimal
 from database import SessionLocal
 from models import Cliente, Cajero, Transaccion, TipoTransaccion
 
-# Creación de la sesión
-db: Session = SessionLocal()
+# ---- CARGA DE DATOS A LA BD DESDE CSVs ----
 
-# Carga de datos
-# ---- CLIENTES ----
-clientes_df = pd.read_csv("data/clientes.csv")
-for _, row in clientes_df.iterrows():
-    fecha_nac = datetime.strptime(row["fecha_nacimiento"], "%Y-%m-%d").date()
+db: Session = SessionLocal() # Creamos una sesión para conectar con la bd.
 
+# Cargamos data/clientes.csv usando la biblioteca de pandas y en base a la estructura de nuestros modelos
+clientes_df = pd.read_csv("data/clientes.csv") # Se crea un dataframe con todos los datos
+for _, row in clientes_df.iterrows(): # y por cada línea, iterativamente
+    fecha_nac = datetime.strptime(row["fecha_nacimiento"], "%Y-%m-%d").date() # transformamos el formato de la fecha
+    # y guardamos cada dato en la columna correspondiente:
     cliente = Cliente(
         id=row["id"],
         nombre=row["nombre"],
@@ -25,7 +25,7 @@ for _, row in clientes_df.iterrows():
     )
     db.add(cliente)
 
-# ---- CAJEROS ----
+# Ídem a clientes con las demás tablas (cajeros, tipos_transacciones, transacciones)
 cajeros_df = pd.read_csv("data/cajeros.csv")
 for _, row in cajeros_df.iterrows():
     cajero = Cajero(
@@ -37,7 +37,6 @@ for _, row in cajeros_df.iterrows():
     )
     db.add(cajero)
 
-# ---- TIPOS DE TRANSACCIONES ----
 tipos_df = pd.read_csv("data/tipos_transacciones.csv")
 for _, row in tipos_df.iterrows():
     tipo = TipoTransaccion(
@@ -45,7 +44,6 @@ for _, row in tipos_df.iterrows():
     )
     db.add(tipo)
 
-# ---- TRANSACCIONES ----
 transacciones_df = pd.read_csv("data/transacciones.csv")
 for _, row in transacciones_df.iterrows():
     fecha_hora = datetime.strptime(row["fecha_hora"], "%Y-%m-%d %H:%M:%S")
@@ -60,8 +58,7 @@ for _, row in transacciones_df.iterrows():
     )
     db.add(transaccion)
 
-# Confirmación de cambios
-db.commit()
-db.close()
+db.commit() # Confirmamos los cambios (si no no se guardan)
+db.close() # Cerramos la bd
 
 print("Datos cargados correctamente")
