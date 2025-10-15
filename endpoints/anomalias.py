@@ -40,7 +40,7 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Rec
             "fecha_hora": t.fecha_hora
         }
         for t in transacciones
-    ] # y las convierte en una lista de diccionarios con los campos clave
+    ] # y las convierte en una lista de diccionarios con los campos 
     df = pd.DataFrame(data) # Convierte la lista en un dataframe
 
     # Feature engineering
