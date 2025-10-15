@@ -376,3 +376,50 @@ def get_stats(db: Session = Depends(database.get_db)):
         "total_transacciones_sospechosas": total_transacciones_sospechosas,
         "porcentaje_clientes_sospechosos": round(porcentaje_clientes_sospechosos, 2)
     }
+
+@router.get("/graficos/transacciones_boxplot", response_class=HTMLResponse)
+def grafico_boxplot_transacciones(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
+    transacciones = db.query(models.Transaccion).offset(skip).limit(limit).all()
+    if not transacciones:
+        return "<h3>No hay transacciones</h3>"
+
+    data = [
+        {
+            "id": t.id,
+            "id_cliente": t.id_cliente,
+            "id_cajero": t.id_cajero,
+            "id_tipo_transaccion": t.id_tipo_transaccion,
+            "monto": float(t.monto),
+            "fecha_hora": t.fecha_hora
+        }
+        for t in transacciones
+    ]
+    df = pd.DataFrame(data)
+
+    df["fecha_hora"] = pd.to_datetime(df["fecha_hora"])
+    df["hora"] = df["fecha_hora"].dt.hour
+
+    # Entrenamiento con Isolation Forest
+    features = df[["monto", "hora"]]
+    iso_forest = IsolationForest(contamination=0.1, random_state=42)
+    df["sospechoso"] = iso_forest.fit_predict(features)
+    df["categoria"] = df["sospechoso"].map({1: "Normal", -1: "Sospechoso"})
+
+    # Gráfico de caja: distribución de montos por hora
+    fig = px.box(
+        df,
+        x="hora",
+        y="monto",
+        color="categoria",
+        points="all",  # muestra también los puntos individuales
+        title="Distribución de Montos por Hora - Detección de Anomalías",
+        color_discrete_map={"Normal": "blue", "Sospechoso": "red"}
+    )
+
+    fig.update_layout(
+        xaxis_title="Hora del día",
+        yaxis_title="Monto ($)",
+        hovermode="closest"
+    )
+
+    return fig.to_html(full_html=True)
