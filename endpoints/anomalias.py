@@ -19,11 +19,27 @@ router = APIRouter(prefix="/anomalias", tags=["Anomalías"])
 
 # Detección de clientes sospechosos con IA
 @router.get("/clientes_sospechosos", response_model=List[req_res_models.ClienteSospechosoResponse])
-def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
+def detectar_clientes_sospechosos(
+    db: Session = Depends(database.get_db),
+    monto_min: Optional[float] = Query(None, description="Monto mínimo promedio"),
+    monto_max: Optional[float] = Query(None, description="Monto máximo promedio"),
+    fecha_inicio: Optional[datetime] = Query(None, description="Fecha inicial (YYYY-MM-DD)"),
+    fecha_fin: Optional[datetime] = Query(None, description="Fecha final (YYYY-MM-DD)"),
+    motivo: Optional[str] = Query(None, description="Filtrar por motivo de sospecha: 'monto_alto', 'frecuencia_alta', 'transacciones_seguidas', 'comportamiento_atipico'")
+):
+    # Obtenemos datos de transacciones con filtros de fecha
+    query = db.query(models.Transaccion)
+    
+    if fecha_inicio:
+        query = query.filter(models.Transaccion.fecha_hora >= fecha_inicio)
+    if fecha_fin:
+        query = query.filter(models.Transaccion.fecha_hora <= fecha_fin)
+    
     # Obtenemos datos de transacciones
-    transacciones = db.query(models.Transaccion).all()
+    transacciones = query.all()
+    
     if not transacciones:
-        raise HTTPException(status_code=404, detail="No hay transacciones registradas")
+        raise HTTPException(status_code=404, detail="No hay transacciones registradas con los filtros aplicados")
     data = [
         {
             "id_cliente": t.id_cliente,
@@ -45,6 +61,15 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
         tiempo_entre_transacciones=("fecha_hora", lambda x: x.diff().dt.total_seconds().mean())
     ).reset_index()
     df_features.fillna(0, inplace=True)
+    
+    # Aplicar filtros de monto
+    if monto_min is not None:
+        df_features = df_features[df_features["monto_promedio"] >= monto_min]
+    if monto_max is not None:
+        df_features = df_features[df_features["monto_promedio"] <= monto_max]
+    
+    if df_features.empty:
+        return []
 
     # Seleccionamos features
     features = [
@@ -80,6 +105,11 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
             motivos.append("Transacciones demasiado seguidas")
         if not motivos:  # fallback si los modelos marcaron sospechoso pero no encontramos regla
             motivos.append("Comportamiento atípico indefinido")
+        
+        # Filtro por motivo si tengo
+        if motivo and motivo not in motivos_codigos:
+            continue
+            
         resultados.append(req_res_models.ClienteSospechosoResponse(
             id_cliente=row["id_cliente"],
             nombre=cliente.nombre if cliente else "Desconocido",
@@ -92,31 +122,52 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)):
 # DASHBOARD
 
 @router.get("/estadisticas", response_model=Dict[str, float])
-def get_stats(db: Session = Depends(database.get_db)):
-    total_transacciones = db.query(models.Transaccion).count()
+def get_stats(
+    db: Session = Depends(database.get_db),
+    fecha_inicio: Optional[datetime] = Query(None, description="Fecha inicial para estadísticas"),
+    fecha_fin: Optional[datetime] = Query(None, description="Fecha final para estadísticas")
+):
+    query_transacciones = db.query(models.Transaccion)
+    
+    # Aplicar filtros de fecha
+    if fecha_inicio:
+        query_transacciones = query_transacciones.filter(models.Transaccion.fecha_hora >= fecha_inicio)
+    if fecha_fin:
+        query_transacciones = query_transacciones.filter(models.Transaccion.fecha_hora <= fecha_fin)
+    
+    total_transacciones = query_transacciones.count()
     total_clientes = db.query(models.Cliente).count()
+    
     if total_transacciones == 0 or total_clientes == 0:
         raise HTTPException(status_code=404, detail="No hay datos suficientes para calcular estadísticas")
 
-    # Obtenemos el timestamp más antiguo y el más reciente
-    min_fecha = db.query(func.min(models.Transaccion.fecha_hora)).scalar()
-    max_fecha = db.query(func.max(models.Transaccion.fecha_hora)).scalar()
+    # Obtenemos el timestamp más antiguo y el más reciente (con filtros)
+    min_fecha = query_transacciones.with_entities(func.min(models.Transaccion.fecha_hora)).scalar()
+    max_fecha = query_transacciones.with_entities(func.max(models.Transaccion.fecha_hora)).scalar()
+    
     if not min_fecha or not max_fecha or min_fecha == max_fecha:
         raise HTTPException(status_code=400, detail="No hay suficiente rango temporal para calcular promedio")
+        
     # Calculamos la diferencia en minutos
     minutos = (max_fecha - min_fecha).total_seconds() / 60
     promedio_transacciones_por_minuto = total_transacciones / minutos
 
     # Reutilizamos la detección de clientes sospechosos
-    clientes_sospechosos = detectar_clientes_sospechosos(db)
+    clientes_sospechosos = detectar_clientes_sospechosos(db=db, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin)
 
     # Total de transacciones sospechosas (las de esos clientes)
     ids_sospechosos = [c.id_cliente for c in clientes_sospechosos]
-    total_transacciones_sospechosas = db.query(models.Transaccion).filter(
+    
+    query_sospechosas = db.query(models.Transaccion).filter(
         models.Transaccion.id_cliente.in_(ids_sospechosos)
-    ).count()
-
-    porcentaje_clientes_sospechosos = (len(clientes_sospechosos) / total_clientes) * 100
+    )
+    if fecha_inicio:
+        query_sospechosas = query_sospechosas.filter(models.Transaccion.fecha_hora >= fecha_inicio)
+    if fecha_fin:
+        query_sospechosas = query_sospechosas.filter(models.Transaccion.fecha_hora <= fecha_fin)
+    
+    total_transacciones_sospechosas = query_sospechosas.count()
+    porcentaje_clientes_sospechosos = (len(clientes_sospechosos) / total_clientes) * 100 if total_clientes > 0 else 0
 
     return {
         "promedio_transacciones_por_minuto": round(promedio_transacciones_por_minuto, 2),
@@ -126,23 +177,48 @@ def get_stats(db: Session = Depends(database.get_db)):
     }
 
 @router.get("/graficos/transacciones_sospechosas", response_class=HTMLResponse)
-def grafico_plotly(db: Session = Depends(database.get_db)):
+def grafico_plotly(
+    db: Session = Depends(database.get_db),
+    fecha_inicio: Optional[datetime] = Query(None, description="Fecha inicial"),
+    fecha_fin: Optional[datetime] = Query(None, description="Fecha final"),
+    monto_min: Optional[float] = Query(None, description="Monto mínimo"),
+    monto_max: Optional[float] = Query(None, description="Monto máximo")
+):
     # Reutilizamos las features
-    transacciones = db.query(models.Transaccion).all()
+    query = db.query(models.Transaccion)
+    
+    if fecha_inicio:
+        query = query.filter(models.Transaccion.fecha_hora >= fecha_inicio)
+    if fecha_fin:
+        query = query.filter(models.Transaccion.fecha_hora <= fecha_fin)
+    
+    transacciones = query.all()
+    
     if not transacciones:
-        return "<h3>No hay transacciones</h3>"
+        return "<h3>No hay transacciones con los filtros aplicados</h3>"
+        
     data = [
         {"id_cliente": t.id_cliente, "monto": float(t.monto), "fecha_hora": t.fecha_hora}
         for t in transacciones
     ]
     df = pd.DataFrame(data)
     df["fecha_hora"] = pd.to_datetime(df["fecha_hora"])
+    
     df_features = df.groupby("id_cliente").agg(
         monto_promedio=("monto", "mean"),
         tiempo_entre_transacciones=("fecha_hora", lambda x: x.diff().dt.total_seconds().mean())
     ).reset_index()
     df_features.fillna(0, inplace=True)
 
+    # Aplicar filtros de monto
+    if monto_min is not None:
+        df_features = df_features[df_features["monto_promedio"] >= monto_min]
+    if monto_max is not None:
+        df_features = df_features[df_features["monto_promedio"] <= monto_max]
+    
+    if df_features.empty:
+        return "<h3>No hay datos después de aplicar los filtros</h3>"
+    
     iso_forest = IsolationForest(contamination=0.05, random_state=42)
     df_features["sospechoso"] = iso_forest.fit_predict(df_features[["monto_promedio", "tiempo_entre_transacciones"]])
 
