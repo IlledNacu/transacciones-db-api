@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 import numpy as np
 from sqlalchemy.orm import Session
 from endpoints.clientes import get_clientes_count
 import models
 import req_res_models
 import database
-from typing import List, Dict
+from typing import List, Dict, Optional
 # Para el modelo de IA
 import pandas as pd
 from sklearn.ensemble import IsolationForest
@@ -409,7 +409,7 @@ def get_stats(
     # Total de transacciones sospechosas (las de esos clientes)
     ids_sospechosos = [c.id_cliente for c in clientes_sospechosos]
     
-    query_sospechosas = db.query(models.Transaccion).filter(
+    query_sospechosas = query_transacciones.filter(
         models.Transaccion.id_cliente.in_(ids_sospechosos)
     )
     if fecha_inicio:
