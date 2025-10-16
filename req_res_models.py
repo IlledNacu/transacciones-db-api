@@ -3,9 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List
 
-# Modelos Pydantic (Dataclass)
-# para hacer los HTTP request
-# y recibir los HTTP response
+# ---- MODELOS PYDANTIC (Dataclass DTO para hacer las HTTP request y recibir las HTTP response) ---- 
 
 class TipoTransaccionCreate(BaseModel):
     nombre: str
@@ -52,17 +50,18 @@ class TransaccionResponse(TransaccionCreate):
     class Config:
         from_attributes = True
 
+class TransaccionSospechosaResponse(TransaccionCreate):
+    class Config:
+        from_attributes = True
+    nombre: str
+    apellido: str
+    sospechosa_por: List[str]
+    score_anomalia: float
+
 class ClienteSospechosoResponse(BaseModel):
     id_cliente: str
     nombre: str
     apellido: str
     sospechoso_por: List[str]
 
-class TransaccionSospechosaResponse(BaseModel):
-    id_transaccion: str
-    id_cliente: str
-    nombre: str
-    apellido: str
-    monto: Decimal
-    fecha_hora: datetime
-    sospechosa_por: List[str]
+# Hay que revisar si están funcionando bien las herencias actuales y si puede mejorarse

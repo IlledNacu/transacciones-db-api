@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Foreign
 from sqlalchemy.orm import relationship
 from database import Base
 
-# Modelo de la base de datos
+# ---- MODELADO DE LA BD (según la sintaxis de SQLAlchemy) ---- 
 
 class TipoTransaccion(Base):
     __tablename__ = "tipos_transacciones"
