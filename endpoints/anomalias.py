@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 import numpy as np
 from sqlalchemy.orm import Session
+from endpoints.clientes import get_clientes_count
 import models
 import req_res_models
 import database
@@ -141,7 +142,7 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Rec
 
 # Detección de transacciones individuales sospechosas sin agrupar por cliente
 @router.get("/transacciones_sospechosas", response_model=List[req_res_models.TransaccionSospechosaResponse])
-def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 10000, db: Session = Depends(database.get_db)): # Recibe los parámetros skip y limit para la paginación de los datos
+def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)): # Recibe los parámetros skip y limit para la paginación de los datos
     transacciones = db.query(models.Transaccion).offset(skip).limit(limit).all() # Obtiene todas las transacciones de la BD que entren entre los parámetros skip y limit
     if not transacciones:
         raise HTTPException(status_code=404, detail="No hay transacciones registradas")
@@ -251,7 +252,7 @@ def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 10000, db: Se
 # ---- GRÁFICOS ---- 
 
 @router.get("/graficos/clientes_sospechosos", response_class=HTMLResponse) # La respuesta será de tipo HTML, ya que se devuelve un gráfico interactivo en formato web
-def grafico_clientes_sospechosos(db: Session = Depends(database.get_db)):
+def grafico_clientes_sospechosos(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
     transacciones = db.query(models.Transaccion).all() # Consulta todas las transacciones registradas en la base de datos
     if not transacciones:
         return "<h3>No hay transacciones</h3>"
@@ -288,7 +289,7 @@ def grafico_clientes_sospechosos(db: Session = Depends(database.get_db)):
     return fig.to_html(full_html=True) # Devuelve el gráfico como un HTML completo
 
 @router.get("/graficos/transacciones_sospechosas", response_class=HTMLResponse)
-def grafico_transacciones_sospechosas(skip: int = 0, limit: int = 10000, db: Session = Depends(database.get_db)):
+def grafico_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
     transacciones = db.query(models.Transaccion).offset(skip).limit(limit).all() # Se consultan las transacciones en la bd aplicando paginación (skip y limit)
     if not transacciones:
         return "<h3>No hay transacciones</h3>"
@@ -343,7 +344,7 @@ def grafico_transacciones_sospechosas(skip: int = 0, limit: int = 10000, db: Ses
 def get_stats(db: Session = Depends(database.get_db)):
      # Ejecutamos una consulta SQL COUNT(*) sobre la tabla Transaccion y guardamos el total de filas; luego con Clientes
     total_transacciones = db.query(models.Transaccion).count()
-    total_clientes = db.query(models.Cliente).count()
+    total_clientes = get_clientes_count(db)
     if total_transacciones == 0 or total_clientes == 0:
         raise HTTPException(status_code=404, detail="No hay datos suficientes para calcular estadísticas")
 
