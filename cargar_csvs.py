@@ -44,7 +44,7 @@ for _, row in tipos_df.iterrows():
     )
     db.add(tipo)
 
-transacciones_df = pd.read_csv("data/transacciones.csv")
+transacciones_df = pd.read_csv("data/transacciones_modificadas.csv")
 for _, row in transacciones_df.iterrows():
     fecha_hora = datetime.strptime(row["fecha_hora"], "%Y-%m-%d %H:%M:%S")
 
