@@ -338,45 +338,6 @@ def grafico_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Sess
 
     return fig.to_html(full_html=True)
 
-# ---- DASHBOARD ----
-
-@router.get("/estadisticas", response_model=Dict[str, float])
-def get_stats(db: Session = Depends(database.get_db)):
-     # Ejecutamos una consulta SQL COUNT(*) sobre la tabla Transaccion y guardamos el total de filas; luego con Clientes
-    total_transacciones = db.query(models.Transaccion).count()
-    total_clientes = get_clientes_count(db)
-    if total_transacciones == 0 or total_clientes == 0:
-        raise HTTPException(status_code=404, detail="No hay datos suficientes para calcular estadísticas")
-
-    # Obtenemos el timestamp más antiguo y el más reciente
-    min_fecha = db.query(func.min(models.Transaccion.fecha_hora)).scalar() # Ejecuta una consulta SQL SELECT MIN(fecha_hora) FROM transaccion y devuelve el valor (scalar())
-    max_fecha = db.query(func.max(models.Transaccion.fecha_hora)).scalar() # Ejecuta una consulta SQL SELECT MAX(fecha_hora) FROM transaccion y devuelve el valor
-    if not min_fecha or not max_fecha or min_fecha == max_fecha:
-        raise HTTPException(status_code=400, detail="No hay suficiente rango temporal para calcular promedio")
-    
-    # Calculamos la diferencia en minutos y luego el promedio de transacciones por minuto en ese periodo
-    minutos = (max_fecha - min_fecha).total_seconds() / 60
-    promedio_transacciones_por_minuto = total_transacciones / minutos
-
-    # Reutilizamos la detección de clientes sospechosos
-    clientes_sospechosos = detectar_clientes_sospechosos(db)
-
-    # REVISAR QUÉ Y CÓMO ESTÁ CONTABILIZANDO AL CALCULAR ESTAS TRANSACCIONES SOSPECHOSAS --> Se redujeron
-    # Total de transacciones sospechosas (las de esos clientes)
-    ids_sospechosos = [c.id_cliente for c in clientes_sospechosos]
-    total_transacciones_sospechosas = db.query(models.Transaccion).filter(
-        models.Transaccion.id_cliente.in_(ids_sospechosos)
-    ).count()
-
-    porcentaje_clientes_sospechosos = (len(clientes_sospechosos) / total_clientes) * 100
-
-    return {
-        "promedio_transacciones_por_minuto": round(promedio_transacciones_por_minuto, 2),
-        "total_clientes": total_clientes,
-        "total_transacciones_sospechosas": total_transacciones_sospechosas,
-        "porcentaje_clientes_sospechosos": round(porcentaje_clientes_sospechosos, 2)
-    }
-
 @router.get("/graficos/transacciones_boxplot", response_class=HTMLResponse)
 def grafico_boxplot_transacciones(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
     transacciones = db.query(models.Transaccion).offset(skip).limit(limit).all()
@@ -423,3 +384,42 @@ def grafico_boxplot_transacciones(skip: int = 0, limit: int = 5000, db: Session 
     )
 
     return fig.to_html(full_html=True)
+
+# ---- DASHBOARD ----
+
+@router.get("/estadisticas", response_model=Dict[str, float])
+def get_stats(db: Session = Depends(database.get_db)):
+     # Ejecutamos una consulta SQL COUNT(*) sobre la tabla Transaccion y guardamos el total de filas; luego con Clientes
+    total_transacciones = db.query(models.Transaccion).count()
+    total_clientes = get_clientes_count(db)
+    if total_transacciones == 0 or total_clientes == 0:
+        raise HTTPException(status_code=404, detail="No hay datos suficientes para calcular estadísticas")
+
+    # Obtenemos el timestamp más antiguo y el más reciente
+    min_fecha = db.query(func.min(models.Transaccion.fecha_hora)).scalar() # Ejecuta una consulta SQL SELECT MIN(fecha_hora) FROM transaccion y devuelve el valor (scalar())
+    max_fecha = db.query(func.max(models.Transaccion.fecha_hora)).scalar() # Ejecuta una consulta SQL SELECT MAX(fecha_hora) FROM transaccion y devuelve el valor
+    if not min_fecha or not max_fecha or min_fecha == max_fecha:
+        raise HTTPException(status_code=400, detail="No hay suficiente rango temporal para calcular promedio")
+    
+    # Calculamos la diferencia en minutos y luego el promedio de transacciones por minuto en ese periodo
+    minutos = (max_fecha - min_fecha).total_seconds() / 60
+    promedio_transacciones_por_minuto = total_transacciones / minutos
+
+    # Reutilizamos la detección de clientes sospechosos
+    clientes_sospechosos = detectar_clientes_sospechosos(db)
+
+    # REVISAR QUÉ Y CÓMO ESTÁ CONTABILIZANDO AL CALCULAR ESTAS TRANSACCIONES SOSPECHOSAS --> Se redujeron
+    # Total de transacciones sospechosas (las de esos clientes)
+    ids_sospechosos = [c.id_cliente for c in clientes_sospechosos]
+    total_transacciones_sospechosas = db.query(models.Transaccion).filter(
+        models.Transaccion.id_cliente.in_(ids_sospechosos)
+    ).count()
+
+    porcentaje_clientes_sospechosos = (len(clientes_sospechosos) / total_clientes) * 100
+
+    return {
+        "promedio_transacciones_por_minuto": round(promedio_transacciones_por_minuto, 2),
+        "total_clientes": total_clientes,
+        "total_transacciones_sospechosas": total_transacciones_sospechosas,
+        "porcentaje_clientes_sospechosos": round(porcentaje_clientes_sospechosos, 2)
+    }
