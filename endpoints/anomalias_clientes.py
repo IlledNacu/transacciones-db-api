@@ -20,6 +20,12 @@ router = APIRouter(prefix="/anomalias", tags=["Anomalías"])
 
 # ---- DETECCIÓN DE ANOMALÍAS EN CLIENTES  ----
 
+# Funcion para evitar valores NaN en diff de tiempo (cuando un cliente tiene una sola transacción)
+def safe_time_diff(x):
+    if len(x) < 2:
+        return 0
+    return x.diff().dt.total_seconds().mean()
+
 # Endpoint para obtener a los clientes considerados sospechosos por mínimo 2 modelos de IA y los motivos
 @router.get("/clientes_sospechosos", response_model=List[req_res_models.ClienteSospechosoResponse])
 def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Recibe una sesión de la bd que se inyecta automáticamente con Depends(database.get_db)
@@ -38,13 +44,15 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Rec
 
     # Feature engineering
     df["fecha_hora"] = pd.to_datetime(df["fecha_hora"]) # Asegura el formato correcto de la variable
+    df = df.sort_values(by=["id_cliente", "fecha_hora"])
+    
     df_features = df.groupby("id_cliente").agg( # Agrupa por cliente y calcula estadísticas
         conteo_transacciones=("monto", "count"),
         monto_promedio=("monto", "mean"),
         monto_std=("monto", "std"),
         monto_maximo=("monto", "max"),
         monto_minimo=("monto", "min"),
-        tiempo_entre_transacciones=("fecha_hora", lambda x: x.diff().dt.total_seconds().mean())
+        tiempo_entre_transacciones=("fecha_hora", safe_time_diff)
     ).reset_index()
     df_features.fillna(0, inplace=True) # Si algún cálculo da NaN, lo reemplaza por 0
 
@@ -71,16 +79,25 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Rec
     scaler = StandardScaler() # Escala las variables (K-Means es sensible a la escala)
     X_scaled = scaler.fit_transform(X)
     n_clusters = min(max(2, len(df_features) // 10), 10) # Calcula clusters de clientes (determinamos número óptimo de clusters: mínimo 2, máximo 10)
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10) # Asigna un cluster a cada cliente
-    df_features["cluster"] = kmeans.fit_predict(X_scaled)
-    df_features["distancia_centroide"] = np.min( # Calcula la distancia de cada cliente a su centroide de cluster
-        np.linalg.norm(X_scaled[:, np.newaxis] - kmeans.cluster_centers_, axis=2), 
-        axis=1
-    )
-    threshold = np.percentile(df_features["distancia_centroide"], 95) # Marcamos como outliers los que están en el percentil 95 de distancia
-    df_features["outlier_kmeans"] = df_features["distancia_centroide"].apply(
-        lambda x: -1 if x > threshold else 1 # Son sospechosos (-1) los clientes que están en el 5% más alejado del centroide
-    )
+    
+    if n_clusters > len(df_features):
+        n_clusters = len(df_features)
+
+    if n_clusters < 2:
+        df_features["outlier_kmeans"] = 1 # Todos normales si no hay suficientes datos
+        df_features["distancia_centroide"] = 0
+        threshold = 0
+    else:
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10) # Asigna un cluster a cada cliente
+        df_features["cluster"] = kmeans.fit_predict(X_scaled)
+        df_features["distancia_centroide"] = np.min( # Calcula la distancia de cada cliente a su centroide de cluster
+            np.linalg.norm(X_scaled[:, np.newaxis] - kmeans.cluster_centers_, axis=2), 
+            axis=1
+        )
+        threshold = np.percentile(df_features["distancia_centroide"], 95) # Marcamos como outliers los que están en el percentil 95 de distancia
+        df_features["outlier_kmeans"] = df_features["distancia_centroide"].apply(
+            lambda x: -1 if x > threshold else 1 # Son sospechosos (-1) los clientes que están en el 5% más alejado del centroide
+        )
 
     # Sumamos cuántos modelos marcaron a cada cliente como sospechoso
     df_features["votos_sospechoso"] = (
@@ -88,11 +105,6 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Rec
         (df_features["outlier_lof"] == -1).astype(int) +
         (df_features["outlier_kmeans"] == -1).astype(int)
     )
-
-    # Identificamos sospechosos: detectado por 1 modelo mínimo
-    # sospechosos = df_features[
-    #     (df_features["outlier_iso_forest"] == -1) | (df_features["outlier_lof"] == -1) | (df_features["outlier_kmeans"] == -1)
-    # ]
 
     # Identificamos sospechosos: mínimo 2 votos (detectado por 2 modelos)
     sospechosos = df_features[df_features["votos_sospechoso"] >= 2]
@@ -116,9 +128,9 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Rec
             motivos.append("Monto muy alto comparado con su promedio")
         if row["conteo_transacciones"] > df_features["conteo_transacciones"].mean() * 3:
             motivos.append("Frecuencia inusual de transacciones")
-        if row["tiempo_entre_transacciones"] < df_features["tiempo_entre_transacciones"].mean() / 3:
+        if row["tiempo_entre_transacciones"] < df_features["tiempo_entre_transacciones"].mean() / 3 and row["tiempo_entre_transacciones"] > 0:
             motivos.append("Transacciones demasiado seguidas")
-        if row["distancia_centroide"] > threshold:
+        if row["distancia_centroide"] > threshold and threshold > 0:
             motivos.append("Comportamiento alejado de patrones normales (clustering)")
         if not motivos:  # Si ninguno de los motivos anteriores aplica, deja un fallback genérico:
             motivos.append("Comportamiento atípico indefinido")
@@ -137,7 +149,7 @@ def detectar_clientes_sospechosos(db: Session = Depends(database.get_db)): # Rec
 
 @router.get("/graficos/clientes_sospechosos", response_class=HTMLResponse) # La respuesta será de tipo HTML, ya que se devuelve un gráfico interactivo en formato web
 def grafico_clientes_sospechosos(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
-    transacciones = db.query(models.Transaccion).all() # Consulta todas las transacciones registradas en la base de datos
+    transacciones = db.query(models.Transaccion).offset(skip).limit(limit).all() # Consulta todas las transacciones registradas en la base de datos
     if not transacciones:
         return "<h3>No hay transacciones</h3>"
     
@@ -148,10 +160,11 @@ def grafico_clientes_sospechosos(skip: int = 0, limit: int = 5000, db: Session =
     df = pd.DataFrame(data) # Convierte las transacciones en una lista de diccionarios con tres campos clave y luego en un df
 
     df["fecha_hora"] = pd.to_datetime(df["fecha_hora"]) # Formatea la variable
+    df = df.sort_values(by=["id_cliente", "fecha_hora"])
 
     df_features = df.groupby("id_cliente").agg( # Agrupa las transacciones por cliente y calcula por cada uno 2 features
         monto_promedio=("monto", "mean"),
-        tiempo_entre_transacciones=("fecha_hora", lambda x: x.diff().dt.total_seconds().mean())
+        tiempo_entre_transacciones=("fecha_hora", safe_time_diff)
     ).reset_index() # Reinicia el índice para obtener un DataFrame plano
     df_features.fillna(0, inplace=True) # Rellena los valores nulos con 0
 

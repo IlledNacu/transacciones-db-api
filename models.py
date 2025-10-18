@@ -35,12 +35,12 @@ class Cliente(Base):
 
 class Transaccion(Base):
     __tablename__ = "transacciones"
-    id = Column(String(100), primary_key=True, index=True)
-    fecha_hora = Column(DateTime, nullable=False)
-    id_cliente = Column(String(100), ForeignKey("clientes.id"), nullable=False)
-    id_cajero = Column(String(100), ForeignKey("cajeros.id"), nullable=False)
+    id = Column(String, primary_key=True, index=True)
+    fecha_hora = Column(DateTime, nullable=False, index=True)
+    monto = Column(Numeric(12, 2), nullable=False, index=True)
+    id_cliente = Column(String, ForeignKey("clientes.id"), nullable=False, index=True)
+    id_cajero = Column(String, ForeignKey("cajeros.id"), nullable=False)
     id_tipo_transaccion = Column(Integer, ForeignKey("tipos_transacciones.id"), nullable=False)
-    monto = Column(Numeric(12, 2), nullable=False)
 
     cliente = relationship("Cliente", back_populates="transacciones")
     cajero = relationship("Cajero", back_populates="transacciones")

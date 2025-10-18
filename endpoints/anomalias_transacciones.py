@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 import numpy as np
 from sqlalchemy.orm import Session
 import models
 import req_res_models
 import database
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 # Para el modelo de IA
 import pandas as pd
 from sklearn.ensemble import IsolationForest
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/anomalias", tags=["Anomalías"])
 # Detectamos anomalías con IA
 def detectar_anomalias_transacciones(transacciones: List[models.Transaccion]):
     if not transacciones:
-        raise HTTPException(status_code=404, detail="No hay transacciones registradas")
+        return pd.DataFrame(), pd.DataFrame(), 0, 0
 
     # Preprocesamiento: Convierte las transacciones en una lista de diccionarios con los datos relevantes y luego en un df
     data = [
@@ -49,9 +50,17 @@ def detectar_anomalias_transacciones(transacciones: List[models.Transaccion]):
     # Estadísticas globales y por cliente
     monto_promedio_global = df["monto"].mean()
     monto_std_global = df["monto"].std()
-    df["monto_promedio_cliente"] = df.groupby("id_cliente")["monto"].transform("mean")
-    df["monto_std_cliente"] = df.groupby("id_cliente")["monto"].transform("std")
-    df["transacciones_cliente"] = df.groupby("id_cliente")["id"].transform("count")
+    
+    # Chequea si el df no está vacío antes de agrupar
+    if not df.empty:
+        df["monto_promedio_cliente"] = df.groupby("id_cliente")["monto"].transform("mean")
+        df["monto_std_cliente"] = df.groupby("id_cliente")["monto"].transform("std")
+        df["transacciones_cliente"] = df.groupby("id_cliente")["id"].transform("count")
+    else:
+        df["monto_promedio_cliente"] = 0
+        df["monto_std_cliente"] = 0
+        df["transacciones_cliente"] = 0
+
 
     # Ordena por cliente y fecha
     df = df.sort_values(["id_cliente", "fecha_hora"])
@@ -62,6 +71,10 @@ def detectar_anomalias_transacciones(transacciones: List[models.Transaccion]):
     # Features y modelos a usar para detección de anomalías
     features = ["monto", "hora_del_dia", "es_fin_de_semana", "es_horario_nocturno", "tiempo_desde_ultima", "transacciones_cliente"]
     X = df[features].fillna(0)
+    
+    if X.empty:
+        return df, pd.DataFrame(), monto_promedio_global, monto_std_global
+
     X_scaled = StandardScaler().fit_transform(X) # Escalamos para KMeans y LOF
 
     # Entrenamos el modelo Isolation Forest para detectar anomalías globales
@@ -106,16 +119,50 @@ def detectar_anomalias_transacciones(transacciones: List[models.Transaccion]):
 
     return df, sospechosas, monto_promedio_global, monto_std_global
 
+# Función para obtener transacciones y detectar anomalías con filtros
 # Tomamos el total o una porción
-def obtener_transacciones_y_anomalias(db: Session, skip: int = 0, limit: int = None):
+def obtener_transacciones_y_anomalias(
+    db: Session, 
+    skip: int = 0, 
+    limit: int = None,
+    monto_min: Optional[float] = None,
+    monto_max: Optional[float] = None,
+    fecha_desde: Optional[str] = None,
+    fecha_hasta: Optional[str] = None
+):
     # Obtiene todas las transacciones (o una porción si se pasa limit), detecta anomalías y devuelve el dataframe completo y el filtrado de sospechosas
     query = db.query(models.Transaccion)
+
+    # Aplico filtros de monto y fecha antes de hacer el fetch
+    if monto_min is not None:
+        query = query.filter(models.Transaccion.monto >= monto_min)
+    
+    if monto_max is not None:
+        query = query.filter(models.Transaccion.monto <= monto_max)
+    
+    if fecha_desde:
+        try:
+            fecha_desde_dt = pd.to_datetime(fecha_desde)
+            query = query.filter(models.Transaccion.fecha_hora >= fecha_desde_dt)
+        except:
+            pass 
+    
+    if fecha_hasta:
+        try:
+            fecha_hasta_dt = pd.to_datetime(fecha_hasta)
+            query = query.filter(models.Transaccion.fecha_hora <= fecha_hasta_dt)
+        except:
+            pass # Formato de fecha inválido, ignoro el filtro
 
     # Si limit no se especifica, no aplicar paginación
     if limit is not None:
         query = query.offset(skip).limit(limit)
 
     transacciones = query.all()
+    
+    # Chequeo si hay transacciones post filtros
+    if not transacciones:
+        return pd.DataFrame(), pd.DataFrame(), 0, 0
 
     df, sospechosas, monto_promedio_global, monto_std_global = detectar_anomalias_transacciones(transacciones)
 
@@ -124,8 +171,23 @@ def obtener_transacciones_y_anomalias(db: Session, skip: int = 0, limit: int = N
 # ---- RUTAS PARA LA DETECCIÓN DE ANOMALÍAS EN TRANSACCIONES  ----
 
 @router.get("/transacciones_sospechosas", response_model=List[req_res_models.TransaccionSospechosaResponse])
-def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
-    df, sospechosas, monto_promedio_global, monto_std_global = obtener_transacciones_y_anomalias(db, skip, limit)
+def detectar_transacciones_sospechosas(
+    skip: int = 0, 
+    limit: int = 5000,
+    monto_min: Optional[float] = Query(None, description="Monto mínimo"),
+    monto_max: Optional[float] = Query(None, description="Monto máximo"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+    motivo: Optional[str] = Query(None, description="Filtrar por motivo de sospecha"),
+    db: Session = Depends(database.get_db)
+):
+    # Paso los filtros al query de la bd
+    df, sospechosas, monto_promedio_global, monto_std_global = obtener_transacciones_y_anomalias(
+        db, skip, limit, monto_min, monto_max, fecha_desde, fecha_hasta
+    )
+
+    if sospechosas.empty:
+        return []
 
     # Creamos la lista de resultados y buscamos en la BD los datos del cliente asociado a cada transacción sospechosa
     resultados = []
@@ -140,10 +202,14 @@ def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Ses
             motivos.append("Detectado por LOF (outlier local)")
         if row["monto"] > monto_promedio_global + 3 * monto_std_global:
             motivos.append(f"Monto excesivamente alto (${row['monto']:.2f})")
-        if row["monto_std_cliente"] > 0:
+
+        if "monto_std_cliente" in row and row["monto_std_cliente"] > 0:
             z_score = (row["monto"] - row["monto_promedio_cliente"]) / row["monto_std_cliente"]
             if abs(z_score) > 3:
                 motivos.append(f"Monto inusual para este cliente (Z-score: {z_score:.2f})")
+        elif "monto_promedio_cliente" in row and row["monto"] > row["monto_promedio_cliente"] * 5:
+             motivos.append("Monto inusual para este cliente (sin std)")
+
         if row["es_horario_nocturno"] == 1 and row["monto"] > monto_promedio_global:
             motivos.append("Transacción de alto monto en horario nocturno")
         if row["tiempo_desde_ultima"] > 0 and row["tiempo_desde_ultima"] < 60:
@@ -155,6 +221,11 @@ def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Ses
 
         if not motivos:
             motivos.append("Patrón atípico detectado")
+
+        # Aplico filtro por motivo
+        if motivo:
+            if not any(motivo.lower() in m.lower() for m in motivos):
+                continue
 
         # Construimos el DTO de respuesta con la transacción y sus motivos de sospecha
         resultados.append(req_res_models.TransaccionSospechosaResponse(
