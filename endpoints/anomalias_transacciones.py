@@ -123,55 +123,55 @@ def obtener_transacciones_y_anomalias(db: Session, skip: int = 0, limit: int = N
 
 # ---- RUTAS PARA LA DETECCIÓN DE ANOMALÍAS EN TRANSACCIONES  ----
 
-@router.get("/transacciones_sospechosas", response_model=List[req_res_models.TransaccionSospechosaResponse])
-def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
-    df, sospechosas, monto_promedio_global, monto_std_global = obtener_transacciones_y_anomalias(db, skip, limit)
+# @router.get("/transacciones_sospechosas", response_model=List[req_res_models.TransaccionSospechosaResponse])
+# def detectar_transacciones_sospechosas(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
+#     df, sospechosas, monto_promedio_global, monto_std_global = obtener_transacciones_y_anomalias(db, skip, limit)
 
-    # Creamos la lista de resultados y buscamos en la BD los datos del cliente asociado a cada transacción sospechosa
-    resultados = []
-    for _, row in sospechosas.iterrows():
-        cliente = db.query(models.Cliente).filter(models.Cliente.id == row["id_cliente"]).first()
+#     # Creamos la lista de resultados y buscamos en la BD los datos del cliente asociado a cada transacción sospechosa
+#     resultados = []
+#     for _, row in sospechosas.iterrows():
+#         cliente = db.query(models.Cliente).filter(models.Cliente.id == row["id_cliente"]).first()
         
-        # Registramos motivos de sospecha según los modelos de detección
-        motivos = []
-        if row["outlier_iso_forest"] == -1:
-            motivos.append("Detectado por Isolation Forest (patrón anómalo global)")
-        if row["outlier_lof"] == -1:
-            motivos.append("Detectado por LOF (outlier local)")
-        if row["monto"] > monto_promedio_global + 3 * monto_std_global:
-            motivos.append(f"Monto excesivamente alto (${row['monto']:.2f})")
-        if row["monto_std_cliente"] > 0:
-            z_score = (row["monto"] - row["monto_promedio_cliente"]) / row["monto_std_cliente"]
-            if abs(z_score) > 3:
-                motivos.append(f"Monto inusual para este cliente (Z-score: {z_score:.2f})")
-        if row["es_horario_nocturno"] == 1 and row["monto"] > monto_promedio_global:
-            motivos.append("Transacción de alto monto en horario nocturno")
-        if row["tiempo_desde_ultima"] > 0 and row["tiempo_desde_ultima"] < 60:
-            motivos.append(f"Transacción muy cercana a la anterior ({row['tiempo_desde_ultima']:.0f} segs)")
-        if row["es_fin_de_semana"] == 1 and row["monto"] > monto_promedio_global * 2:
-            motivos.append("Transacción de alto monto en fin de semana")
-        if row["monto"] % 1000 == 0 and row["monto"] >= 1000:
-            motivos.append(f"Monto redondo sospechoso (${row['monto']:.2f})")
+#         # Registramos motivos de sospecha según los modelos de detección
+#         motivos = []
+#         if row["outlier_iso_forest"] == -1:
+#             motivos.append("Detectado por Isolation Forest (patrón anómalo global)")
+#         if row["outlier_lof"] == -1:
+#             motivos.append("Detectado por LOF (outlier local)")
+#         if row["monto"] > monto_promedio_global + 3 * monto_std_global:
+#             motivos.append(f"Monto excesivamente alto (${row['monto']:.2f})")
+#         if row["monto_std_cliente"] > 0:
+#             z_score = (row["monto"] - row["monto_promedio_cliente"]) / row["monto_std_cliente"]
+#             if abs(z_score) > 3:
+#                 motivos.append(f"Monto inusual para este cliente (Z-score: {z_score:.2f})")
+#         if row["es_horario_nocturno"] == 1 and row["monto"] > monto_promedio_global:
+#             motivos.append("Transacción de alto monto en horario nocturno")
+#         if row["tiempo_desde_ultima"] > 0 and row["tiempo_desde_ultima"] < 60:
+#             motivos.append(f"Transacción muy cercana a la anterior ({row['tiempo_desde_ultima']:.0f} segs)")
+#         if row["es_fin_de_semana"] == 1 and row["monto"] > monto_promedio_global * 2:
+#             motivos.append("Transacción de alto monto en fin de semana")
+#         if row["monto"] % 1000 == 0 and row["monto"] >= 1000:
+#             motivos.append(f"Monto redondo sospechoso (${row['monto']:.2f})")
 
-        if not motivos:
-            motivos.append("Patrón atípico detectado")
+#         if not motivos:
+#             motivos.append("Patrón atípico detectado")
 
-        # Construimos el DTO de respuesta con la transacción y sus motivos de sospecha
-        resultados.append(req_res_models.TransaccionSospechosaResponse(
-            id=row["id"],
-            id_cliente=row["id_cliente"],
-            id_cajero=row["id_cajero"],
-            id_tipo_transaccion=row["id_tipo_transaccion"],
-            monto=row["monto"],
-            fecha_hora=row["fecha_hora"],
-            nombre=cliente.nombre if cliente else "Desconocido",
-            apellido=cliente.apellido if cliente else "Desconocido",
-            sospechosa_por=motivos,
-            score_anomalia=float(row["score_anomalia"])
-        ))
+#         # Construimos el DTO de respuesta con la transacción y sus motivos de sospecha
+#         resultados.append(req_res_models.TransaccionSospechosaResponse(
+#             id=row["id"],
+#             id_cliente=row["id_cliente"],
+#             id_cajero=row["id_cajero"],
+#             id_tipo_transaccion=row["id_tipo_transaccion"],
+#             monto=row["monto"],
+#             fecha_hora=row["fecha_hora"],
+#             nombre=cliente.nombre if cliente else "Desconocido",
+#             apellido=cliente.apellido if cliente else "Desconocido",
+#             sospechosa_por=motivos,
+#             score_anomalia=float(row["score_anomalia"])
+#         ))
 
-    resultados.sort(key=lambda x: x.score_anomalia, reverse=False) # Ordena las transacciones sospechosas por score de anomalía (más raro primero)
-    return resultados
+#     resultados.sort(key=lambda x: x.score_anomalia, reverse=False) # Ordena las transacciones sospechosas por score de anomalía (más raro primero)
+#     return resultados
 
 @router.get("/cantidad_transacciones_sospechosas", response_model=int)
 def contar_transacciones_sospechosas(db: Session = Depends(database.get_db)):
@@ -180,39 +180,39 @@ def contar_transacciones_sospechosas(db: Session = Depends(database.get_db)):
 
 # ---- GRÁFICOS PARA LA DETECCIÓN DE ANOMALÍAS EN TRANSACCIONES  ----
 
-@router.get("/graficos/transacciones_heatmap", response_class=HTMLResponse)
-def grafico_heatmap_transacciones(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
-    # Obtenemos transacciones y detectamos anomalías
-    _, sospechosas, _, _ = obtener_transacciones_y_anomalias(db, skip, limit)
+# @router.get("/graficos/transacciones_heatmap", response_class=HTMLResponse)
+# def grafico_heatmap_transacciones(skip: int = 0, limit: int = 5000, db: Session = Depends(database.get_db)):
+#     # Obtenemos transacciones y detectamos anomalías
+#     _, sospechosas, _, _ = obtener_transacciones_y_anomalias(db, skip, limit)
 
-    if sospechosas.empty:
-        return "<h3>No hay transacciones sospechosas</h3>"
+#     if sospechosas.empty:
+#         return "<h3>No hay transacciones sospechosas</h3>"
 
-    # Extraemos hora del día y día de la semana para el heatmap
-    sospechosas["hora"] = sospechosas["fecha_hora"].dt.hour
-    sospechosas["dia_semana"] = sospechosas["fecha_hora"].dt.dayofweek  # 0=Lunes, 6=Domingo
+#     # Extraemos hora del día y día de la semana para el heatmap
+#     sospechosas["hora"] = sospechosas["fecha_hora"].dt.hour
+#     sospechosas["dia_semana"] = sospechosas["fecha_hora"].dt.dayofweek  # 0=Lunes, 6=Domingo
 
-    # Contamos cantidad de anomalías por hora y día
-    heatmap_data = sospechosas.groupby(["dia_semana", "hora"]).size().reset_index(name="cantidad_sospechosas")
+#     # Contamos cantidad de anomalías por hora y día
+#     heatmap_data = sospechosas.groupby(["dia_semana", "hora"]).size().reset_index(name="cantidad_sospechosas")
 
-    # Convertimos día a nombre para el eje x
-    dias = {0:"Lunes",1:"Martes",2:"Miércoles",3:"Jueves",4:"Viernes",5:"Sábado",6:"Domingo"}
-    heatmap_data["dia_semana_str"] = heatmap_data["dia_semana"].map(dias)
+#     # Convertimos día a nombre para el eje x
+#     dias = {0:"Lunes",1:"Martes",2:"Miércoles",3:"Jueves",4:"Viernes",5:"Sábado",6:"Domingo"}
+#     heatmap_data["dia_semana_str"] = heatmap_data["dia_semana"].map(dias)
 
-    # Gráfico de calor interactivo
-    fig = px.density_heatmap(
-        heatmap_data,
-        x="dia_semana_str",
-        y="hora",
-        z="cantidad_sospechosas",
-        color_continuous_scale="Reds",
-        title="Concentración de Transacciones Sospechosas por Día y Hora",
-        labels={"hora":"Hora del día", "dia_semana_str":"Día de la semana", "cantidad_sospechosas":"Cantidad sospechosa"}
-    )
+#     # Gráfico de calor interactivo
+#     fig = px.density_heatmap(
+#         heatmap_data,
+#         x="dia_semana_str",
+#         y="hora",
+#         z="cantidad_sospechosas",
+#         color_continuous_scale="Reds",
+#         title="Concentración de Transacciones Sospechosas por Día y Hora",
+#         labels={"hora":"Hora del día", "dia_semana_str":"Día de la semana", "cantidad_sospechosas":"Cantidad sospechosa"}
+#     )
 
-    fig.update_layout(
-        yaxis=dict(dtick=1),
-        xaxis=dict(categoryorder="array", categoryarray=["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"])
-    )
+#     fig.update_layout(
+#         yaxis=dict(dtick=1),
+#         xaxis=dict(categoryorder="array", categoryarray=["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"])
+#     )
 
-    return fig.to_html(full_html=True)
+#     return fig.to_html(full_html=True)
