@@ -216,3 +216,102 @@ def contar_transacciones_sospechosas(db: Session = Depends(database.get_db)):
 #     )
 
 #     return fig.to_html(full_html=True)
+
+# ---- NUEVA RUTA: TRANSACCIONES POR CLIENTE ----
+
+@router.get("/transacciones_por_cliente/{id_cliente}", response_model=List[req_res_models.TransaccionSospechosaResponse])
+def get_transacciones_por_cliente(id_cliente: str, db: Session = Depends(database.get_db)):
+    """
+    Obtiene todas las transacciones de un cliente específico, aplica el modelo 
+    de detección de anomalías solo a esas transacciones, y devuelve la lista
+    completa, marcando cuáles son sospechosas.
+    """
+    
+    # 1. Obtener TODAS las transacciones para el cliente
+    transacciones_cliente = db.query(models.Transaccion).filter(models.Transaccion.id_cliente == id_cliente).all()
+
+    if not transacciones_cliente:
+        raise HTTPException(status_code=404, detail=f"No se encontraron transacciones para el cliente {id_cliente}")
+
+    # 2. Aplicar la lógica de detección de anomalías SOLO al subconjunto del cliente
+    # Reutilizamos la función principal, ya que esta maneja el preprocesamiento y los 3 modelos.
+    # El resultado 'df' contiene todas las transacciones del cliente con los scores de anomalía.
+    # El resultado 'sospechosas' es un sub-dataframe filtrado por los criterios.
+    try:
+        df_cliente_analizado, sospechosas, monto_promedio_global, monto_std_global = detectar_anomalias_transacciones(transacciones_cliente)
+    except HTTPException as e:
+        # Esto podría ocurrir si hay menos de 2 transacciones y fallan los cálculos estadísticos (e.g., std=0)
+        # En este caso, simplemente devolvemos las transacciones sin marcar como "sospechosas".
+        print(f"Advertencia: Error al analizar las transacciones del cliente {id_cliente}: {e.detail}")
+        df_cliente_analizado = pd.DataFrame([
+            {
+                "id": t.id,
+                "id_cliente": t.id_cliente,
+                "id_cajero": t.id_cajero,
+                "id_tipo_transaccion": t.id_tipo_transaccion,
+                "monto": float(t.monto),
+                "fecha_hora": t.fecha_hora,
+                "score_anomalia": 0.0, # Por defecto si no se pudo analizar
+                "es_sospechosa_final": False # Campo custom para la respuesta
+            }
+            for t in transacciones_cliente
+        ])
+        sospechosas = pd.DataFrame()
+        monto_promedio_global = df_cliente_analizado['monto'].mean() if not df_cliente_analizado.empty else 0
+        monto_std_global = df_cliente_analizado['monto'].std() if not df_cliente_analizado.empty else 0
+        
+    
+    # 3. Preparar el resultado final, marcando las que cumplen los criterios
+    resultados = []
+    
+    # Marcamos las filas del DF original que son sospechosas (para tener un marcador)
+    sospechosas_ids = set(sospechosas['id'].tolist())
+    df_cliente_analizado['es_sospechosa_final'] = df_cliente_analizado['id'].apply(lambda x: x in sospechosas_ids)
+
+
+    # Iteramos sobre el DataFrame analizado para construir el DTO
+    for _, row in df_cliente_analizado.iterrows():
+        cliente = db.query(models.Cliente).filter(models.Cliente.id == row["id_cliente"]).first()
+        
+        motivos = []
+        score = float(row.get("score_anomalia", 0.0)) # Usar 0.0 si no se calculó
+
+        # Solo listamos motivos si fue marcada como sospechosa por los modelos o por los criterios fijos
+        if row['es_sospechosa_final']:
+            # Lógica de motivos (copiada de la detección masiva, simplificada para este caso)
+            if row.get("outlier_iso_forest") == -1:
+                motivos.append("Detectado por Isolation Forest (patrón anómalo global)")
+            if row.get("outlier_lof") == -1:
+                motivos.append("Detectado por LOF (outlier local)")
+            if row["monto"] > monto_promedio_global + 3 * monto_std_global:
+                motivos.append(f"Monto excesivamente alto (${row['monto']:.2f})")
+            if row.get("monto_std_cliente", 0) > 0:
+                z_score = (row["monto"] - row["monto_promedio_cliente"]) / row["monto_std_cliente"]
+                if abs(z_score) > 3:
+                    motivos.append(f"Monto inusual para este cliente (Z-score: {z_score:.2f})")
+            if row.get("es_horario_nocturno") == 1 and row["monto"] > monto_promedio_global:
+                motivos.append("Transacción de alto monto en horario nocturno")
+            if row.get("tiempo_desde_ultima") > 0 and row.get("tiempo_desde_ultima") < 60:
+                motivos.append(f"Transacción muy cercana a la anterior ({row['tiempo_desde_ultima']:.0f} segs)")
+            
+            if not motivos:
+                motivos.append("Patrón atípico detectado (Alta anomalía, motivos no especificados)")
+        
+        
+        # Construimos el DTO de respuesta con la transacción, incluso si no es sospechosa
+        resultados.append(req_res_models.TransaccionSospechosaResponse(
+            id=row["id"],
+            id_cliente=row["id_cliente"],
+            id_cajero=row["id_cajero"],
+            id_tipo_transaccion=row["id_tipo_transaccion"],
+            monto=row["monto"],
+            fecha_hora=row["fecha_hora"],
+            nombre=cliente.nombre if cliente else "Desconocido",
+            apellido=cliente.apellido if cliente else "Desconocido",
+            sospechosa_por=motivos, # Lista vacía si no es sospechosa
+            score_anomalia=score
+        ))
+
+    # Opcional: Ordenamos las transacciones para que las sospechosas aparezcan primero
+    resultados.sort(key=lambda x: x.score_anomalia, reverse=True)
+    return resultados

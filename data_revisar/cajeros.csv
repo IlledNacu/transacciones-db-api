@@ -1,0 +1,51 @@
+id,nombre,ciudad,provincia,pais
+LA-001,Wisabi Bank HQ,Lagos,Lagos,Nigeria
+LA-002,Victoria Island ATM,Lagos,Lagos,Nigeria
+LA-003,Ikeja ATM,Lagos,Lagos,Nigeria
+LA-004,Lekki ATM,Lagos,Lagos,Nigeria
+LA-005,Surulere ATM,Lagos,Lagos,Nigeria
+LA-006,Festac ATM,Lagos,Lagos,Nigeria
+LA-007,Apapa ATM,Lagos,Lagos,Nigeria
+LA-008,Ikorodu ATM,Lagos,Lagos,Nigeria
+LA-009,Yaba ATM,Lagos,Lagos,Nigeria
+LA-010,Maryland ATM,Lagos,Lagos,Nigeria
+LA-011,Ajah ATM,Lagos,Lagos,Nigeria
+LA-012,Oshodi ATM,Lagos,Lagos,Nigeria
+LA-013,Ogba ATM,Lagos,Lagos,Nigeria
+LA-014,Ikoyi ATM,Lagos,Lagos,Nigeria
+LA-015,Agege ATM,Lagos,Lagos,Nigeria
+KN-001,Wisabi Bank Kano Branch ATM,Kano,Kano,Nigeria
+KN-002,Sabon Gari ATM,Kano,Kano,Nigeria
+KN-003,Fagge ATM,Kano,Kano,Nigeria
+KN-004,Nassarawa ATM,Kano,Kano,Nigeria
+KN-005,Kofar Ruwa ATM,Kano,Kano,Nigeria
+KN-006,Tarauni ATM,Kano,Kano,Nigeria
+KN-007,Dala ATM,Kano,Kano,Nigeria
+KN-008,Gwale ATM,Kano,Kano,Nigeria
+KN-009,Ungogo ATM,Kano,Kano,Nigeria
+KN-010,Warawa ATM,Kano,Kano,Nigeria
+FC-001,FCT Abuja ATM,Abuja,Federal Capital Territory,Nigeria
+FC-002,Kubwa ATM,Abuja,Federal Capital Territory,Nigeria
+FC-003,Garki ATM,Abuja,Federal Capital Territory,Nigeria
+FC-004,Maitama ATM,Abuja,Federal Capital Territory,Nigeria
+FC-005,Wuse ATM,Abuja,Federal Capital Territory,Nigeria
+FC-006,Lugbe ATM,Abuja,Federal Capital Territory,Nigeria
+EN-001,Enugu ATM,Enugu,Enugu,Nigeria
+EN-002,Nsukka ATM,Nsukka,Enugu,Nigeria
+EN-003,Agbani ATM,Enugu,Enugu,Nigeria
+EN-004,Abakpa ATM,Enugu,Enugu,Nigeria
+EN-005,Awgu ATM,Awgu,Enugu,Nigeria
+EN-006,Oji River ATM,Oji,Enugu,Nigeria
+EN-007,Udi ATM,Udi,Enugu,Nigeria
+EN-008,Nkanu ATM,Nkanu,Enugu,Nigeria
+EN-009,Emene ATM,Enugu,Enugu,Nigeria
+RI-001,Port Harcourt ATM,Port Harcourt,Rivers State,Nigeria
+RI-002,Bonny ATM,Bonny,Rivers State,Nigeria
+RI-003,Okrika ATM,Okrika,Rivers State,Nigeria
+RI-004,Obio-Akpor ATM,Obio-Akpor,Rivers State,Nigeria
+RI-005,Eleme ATM,Eleme,Rivers State,Nigeria
+RI-006,Emohua ATM,Emohua,Rivers State,Nigeria
+RI-007,Gokana ATM,Gokana,Rivers State,Nigeria
+RI-008,Oyigbo ATM,Oyigbo,Rivers State,Nigeria
+RI-009,Ahoada ATM,Ahoada,Rivers State,Nigeria
+RI-010,Opobo ATM,Opobo,Rivers State,Nigeria
