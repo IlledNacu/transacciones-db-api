@@ -19,7 +19,9 @@ class Cajero(Base):
     provincia = Column(String(100), nullable=False)
     pais = Column(String(100), nullable=False)
 
-    transacciones = relationship("Transaccion", back_populates="cajero")
+    #transacciones = relationship("Transaccion", back_populates="cajero")
+    transacciones = relationship("Transaccion", back_populates="cajero", cascade="all, delete")
+
 
 class Cliente(Base):
     __tablename__ = "clientes"
@@ -38,7 +40,8 @@ class Transaccion(Base):
     id = Column(String(100), primary_key=True, index=True)
     fecha_hora = Column(DateTime, nullable=False)
     id_cliente = Column(String(100), ForeignKey("clientes.id"), nullable=False)
-    id_cajero = Column(String(100), ForeignKey("cajeros.id"), nullable=False)
+    #id_cajero = Column(String(100), ForeignKey("cajeros.id"), nullable=False)
+    id_cajero = Column(String, ForeignKey("cajeros.id", ondelete="CASCADE"), nullable=False)
     id_tipo_transaccion = Column(Integer, ForeignKey("tipos_transacciones.id"), nullable=False)
     monto = Column(Numeric(12, 2), nullable=False)
 
