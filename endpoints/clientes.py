@@ -25,8 +25,8 @@ def create_cliente(cliente:req_res_models.ClienteCreate, db:Session = Depends(da
     db.add(nuevo_cliente)
     # db.commit()
     try:
-        db.commit() # 🛑 El error ocurre aquí
-    except IntegrityError: # 🛑 Manejar el error si el ID ya existe
+        db.commit()
+    except IntegrityError: # Manejar el error si el ID ya existe
         db.rollback()
         raise HTTPException(status_code=400, detail="El número de cuenta (ID) ya existe.")
 
