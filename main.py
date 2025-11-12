@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from endpoints import anomalias, tipos_transacciones, cajeros, clientes, transacciones
+from endpoints import anomalias_clientes, anomalias_transacciones, estadisticas, tipos_transacciones, cajeros, clientes, transacciones
 
 # Creación de las tablas
 Base.metadata.create_all(bind=engine)
@@ -34,4 +34,6 @@ app.include_router(clientes.router)
 app.include_router(transacciones.router)
 app.include_router(tipos_transacciones.router)
 # Modelo de negocio
-app.include_router(anomalias.router)
+app.include_router(anomalias_transacciones.router)
+app.include_router(anomalias_clientes.router)
+app.include_router(estadisticas.router)
