@@ -63,3 +63,26 @@ def get_all_transaccion(
         .limit(limit)
         .all()
     )
+    
+# ---- OBTENER TODAS LAS TRANSACCIONES POR CLIENTE ----
+# @router.get("/cliente/{id_cliente}", response_model=List[req_res_models.TransaccionResponse])
+# def get_transacciones_por_cliente(
+#     id_cliente: str, 
+#     skip: int = 0, 
+#     limit: int = 5000, # 💡 Límite aumentado de 50 a 5000
+#     db: Session = Depends(database.get_db)
+# ):
+#     """
+#     Obtiene todas las transacciones (sin filtrar por anomalías) de un cliente específico.
+#     """
+#     transacciones = (
+#         db.query(models.Transaccion)
+#         .filter(models.Transaccion.id_cliente == id_cliente)
+#         .order_by(models.Transaccion.fecha_hora.desc()) # Ordenamos de más reciente a más antigua
+#         .offset(skip)
+#         .limit(limit)
+#         .all()
+#     )
+    
+#     # Si no hay transacciones, devuelve una lista vacía, lo cual es correcto.
+#     return transacciones

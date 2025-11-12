@@ -27,7 +27,7 @@ def create_cajero(cajero:req_res_models.CajeroCreate, db:Session = Depends(datab
     return nuevo_cajero
 
 @router.put("/{id}", response_model=req_res_models.CajeroResponse)
-def update_cajero(id:int, cajero:req_res_models.CajeroCreate, db:Session = Depends(database.get_db)):
+def update_cajero(id:str, cajero:req_res_models.CajeroCreate, db:Session = Depends(database.get_db)):
     db_cajero = db.query(models.Cajero).filter(models.Cajero.id == id).first()
     if not db_cajero:
         raise HTTPException(status_code=404, detail="Este cajero no existe.")
@@ -38,7 +38,7 @@ def update_cajero(id:int, cajero:req_res_models.CajeroCreate, db:Session = Depen
     return db_cajero
 
 @router.delete("/{id}")
-def delete_cajero(id:int, db:Session = Depends(database.get_db)):
+def delete_cajero(id:str, db:Session = Depends(database.get_db)):
     db_cajero = db.query(models.Cajero).filter(models.Cajero.id == id).first()
     if not db_cajero:
         raise HTTPException(status_code=404, detail="Este cajero no existe.")

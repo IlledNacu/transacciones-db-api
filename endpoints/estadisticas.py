@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from endpoints.anomalias_clientes import detectar_clientes_sospechosos
-from endpoints.anomalias_transacciones import contar_transacciones_sospechosas
 from endpoints.clientes import get_clientes_count
 from endpoints.transacciones import get_transacciones_count
 import models
@@ -9,7 +8,6 @@ import database
 from typing import Dict
 # Para el modelo de IA
 from sqlalchemy import func
-
 
 router = APIRouter(prefix="/estadisticas", tags=["Anomalías"])
 # APIRouter agrupa todos los endpoints bajo el prefijo /anomalias
@@ -38,14 +36,9 @@ def get_stats(db: Session = Depends(database.get_db)):
 
     porcentaje_clientes_sospechosos = (len(clientes_sospechosos) / total_clientes) * 100
 
-    porcentaje_transacciones_sospechosas = (contar_transacciones_sospechosas(db)/total_transacciones) * 100
-
     return {
         "total_clientes": total_clientes,
         "porcentaje_clientes_sospechosos": round(porcentaje_clientes_sospechosos, 2),
         "total_transacciones": total_transacciones,
-        "promedio_transacciones_por_minuto": round(promedio_transacciones_por_minuto, 2),
-        # "total_transacciones_sospechosas": contar_transacciones_sospechosas(db)
-        "porcentaje_transacciones_sospechosas": round(porcentaje_transacciones_sospechosas, 2)
-        
+        "promedio_transacciones_por_minuto": round(promedio_transacciones_por_minuto, 2)
     }

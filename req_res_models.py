@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 
 # ---- MODELOS PYDANTIC (Dataclass DTO para hacer las HTTP request y recibir las HTTP response) ---- 
 
@@ -37,6 +37,10 @@ class ClienteCreate(BaseModel):
 class ClienteResponse(ClienteCreate):
     class Config:
         from_attributes = True
+
+class ClienteUpdate(BaseModel):
+    ocupacion: Optional[str] = None
+    tipo_cuenta: Optional[str] = None
 
 class TransaccionCreate(BaseModel):
     id: str
