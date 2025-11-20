@@ -19,6 +19,8 @@ Se calculan *features* de comportamiento (ej: `monto_promedio`, `conteo_transacc
 
 El proyecto se organiza en módulos claros para la gestión de la lógica de negocio y los *endpoints* del API:<br>
 
+├── data/ # CSVs limpios<br>
+├── data_original/ # CSVs originales obtenidos en [kaggle.com/dataset](https://www.kaggle.com/datasets/obinnaiheanachor/wisabi-bank-dataset)<br>
 ├── endpoints/<br>
 │ ├── anomalias_clientes.py # Lógica de detección de Clientes Sospechosos<br>
 │ ├── anomalias_transacciones.py # Lógica de detección de Transacciones Sospechosas<br>
